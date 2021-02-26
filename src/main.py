@@ -9,6 +9,8 @@ done = True
 for step in range(5000):
     if done:
         state = env.reset()
+
+    # Think we can just make methods to set these 4 vars ourselves
     state, reward, done, info = env.step(env.action_space.sample())
     env.render()
 
