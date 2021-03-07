@@ -5,15 +5,19 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 # Uses GPU for computations if you have CUDA set up, otherwise it will use CPU
 # to(device) -> Use this to send specific code to the device specified
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-"""
-Neural Network
-"""
+
+
 class NeuralNet(nn.Module):
+    """
+    This class is the model of the neural network that we can potentially use later on
+    if we need to switch from Q-learning to Deep Q-learning.
+    """
     def __init__(self, screen_h, screen_w, num_actions):
         super(NeuralNet, self).__init__()
 
@@ -38,15 +42,20 @@ class NeuralNet(nn.Module):
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
-        return self.head(x.view(x.size(0), -1))
+        return self.head(x.view(x.size(), -1))
+
+
+#Q Learning algorithm
+def policy_iteration(env, iterations, gamma, alpha):
+    """
+    I think we can make this pretty much the same as the assignment.
+    Might have to convert to Deep Q-Learning later on so it isn't
+    just a copy paste of assignment 2.
+    """
 
 
 
-
-
-
-def policy_iteration():
-    return
+    return policy
 
 
 def render_env(policy, max_steps):
@@ -69,6 +78,6 @@ if __name__ == "__main__":
     env = gym_tetris.make('TetrisA-v0')
     env = JoypadSpace(env, MOVEMENT)
 
-    pol = policy_iteration()
+    pol = policy_iteration(env=env, iterations=1000, gamma=0.9, alpha=0.1)
 
     render_env(pol, 5000)

@@ -4,3 +4,8 @@ https://blog.tanka.la/2018/10/19/build-your-first-ai-game-bot-using-openai-gym-k
 
 https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
 |> PyTorch example of how to implement
+
+
+
+https://github.com/uvipen/Tetris-deep-Q-learning-pytorch
+|> Exmaple of how someone else implemented
