@@ -4,6 +4,7 @@ from gym_tetris.actions import MOVEMENT
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 
 
 # Uses GPU for computations if you have CUDA set up, otherwise it will use CPU
@@ -45,6 +46,23 @@ class NeuralNet(nn.Module):
         return self.head(x.view(x.size(), -1))
 
 
+
+def get_action(epsilon, Q_value, current_state):
+    """
+    Returns a new action to take
+    :param epsilon: epsilon
+    :return: the action
+    """
+
+    rand = np.random.random()
+
+    if rand < epsilon:
+        return env.action_space.sample()
+    else:
+        return np.argmax(Q_value[current_state])
+
+
+
 #Q Learning algorithm
 def policy_iteration(env, iterations, gamma, alpha):
     """
@@ -52,6 +70,39 @@ def policy_iteration(env, iterations, gamma, alpha):
     Might have to convert to Deep Q-Learning later on so it isn't
     just a copy paste of assignment 2.
     """
+
+
+
+    # These are different for Tetris and need to be changed accordingly
+    nS = env.nS
+    nA = env.nA
+
+
+
+
+    Q_value = np.zeros((nS, nA))
+    policy = np.ones((env.nS, env.nA)) / env.nA
+    epsilon = 1
+    current_state = env.reset()
+
+    episodes = 0
+    while episodes < iterations:
+        t = 0
+        while epsilon > 0.0001:
+
+            action = get_action(epsilon=epsilon, Q_value=Q_value, current_state=current_state)
+            next_state, reward, done, _ = env.step(action)
+            Q_value[current_state][action] += alpha * (reward + gamma * np.amax(Q_value[next_state]) - Q_value[current_state][action])
+            t += 1
+            epsilon = 1 / t
+            if done:
+                break
+
+            current_state = next_state
+
+        episodes += 1
+        epsilon = 1
+        current_state = env.reset()
 
 
 
