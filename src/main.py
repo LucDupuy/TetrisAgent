@@ -12,8 +12,6 @@ import numpy as np
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-
-
 class NeuralNet(nn.Module):
     """
     This class is the model of the neural network that we can potentially use later on
@@ -46,7 +44,6 @@ class NeuralNet(nn.Module):
         return self.head(x.view(x.size(), -1))
 
 
-
 def get_action(epsilon, Q_value, current_state):
     """
     Returns a new action to take
@@ -62,49 +59,36 @@ def get_action(epsilon, Q_value, current_state):
         return np.argmax(Q_value[current_state])
 
 
-
 #Q Learning algorithm
-def policy_iteration(env, iterations, gamma, alpha):
+def policy_iteration(env, nS, nA, iterations, gamma, alpha):
     """
     I think we can make this pretty much the same as the assignment.
     Might have to convert to Deep Q-Learning later on so it isn't
     just a copy paste of assignment 2.
     """
 
-
-
-    # These are different for Tetris and need to be changed accordingly
-    nS = env.nS
-    nA = env.nA
-
-
-
-
     Q_value = np.zeros((nS, nA))
-    policy = np.ones((env.nS, env.nA)) / env.nA
+    policy = np.ones((nS, nA)) / nA
     epsilon = 1
     current_state = env.reset()
 
     episodes = 0
     while episodes < iterations:
+        done = False
         t = 0
-        while epsilon > 0.0001:
-
+        while not done and epsilon > 0.001:
             action = get_action(epsilon=epsilon, Q_value=Q_value, current_state=current_state)
             next_state, reward, done, _ = env.step(action)
             Q_value[current_state][action] += alpha * (reward + gamma * np.amax(Q_value[next_state]) - Q_value[current_state][action])
             t += 1
             epsilon = 1 / t
-            if done:
-                break
 
             current_state = next_state
 
         episodes += 1
         epsilon = 1
         current_state = env.reset()
-
-
+        print("Episode", episodes, "done")
 
     return policy
 
@@ -125,10 +109,30 @@ def render_env(policy, max_steps):
     env.render()
 
 
+def sample_state_space(env):
+    """
+    Determine how many states each episode will have
+    Since Tetris can be played indefinitely, it doesn't have a set amount of states unlike Frozen-Lake assignments
+    One solution would be to define the number of states ourselves or we could play through a game and use the number of actions there
+    """
+    iterations = 0
+    done = False
+
+    while not done:
+        state, reward, done, info = env.step(env.action_space.sample())
+        iterations += 1
+        # env.render()
+
+    return iterations
+
+
 if __name__ == "__main__":
     env = gym_tetris.make('TetrisA-v0')
     env = JoypadSpace(env, MOVEMENT)
 
-    pol = policy_iteration(env=env, iterations=1000, gamma=0.9, alpha=0.1)
+    nS = sample_state_space(env=env)
+    nA = len(MOVEMENT)
+
+    pol = policy_iteration(env=env, nS=nS, nA=nA, iterations=1000, gamma=0.9, alpha=0.1)
 
     render_env(pol, 5000)
