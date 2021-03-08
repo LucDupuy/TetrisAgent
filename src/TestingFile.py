@@ -4,7 +4,6 @@ from gym_tetris.actions import SIMPLE_MOVEMENT
 import numpy as np
 from pil import Image
 
-
 env = gym_tetris.make('TetrisA-v0')
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
 
@@ -25,11 +24,11 @@ move = {
 # alpha = 0.1
 # gamma = 0.9
 
-state = env.reset()
-action = 5
-action_set = []
-block = ''
-stats = []
+state = env.reset() # Screenshot/rgb array of game at a given time
+action = 5 # The current action to take (see move dictionary)
+action_set = [] # The sequence of actions to take
+block = '' # The name of the current block that is falling
+stats = [] # The amount of each block dropped onto the playfield
 
 def get_board(state):
     """
@@ -148,19 +147,18 @@ def find_next_states(board, block, pos):
     """
     
     next_states = []
-    # print("Given State:\n", pos, "\n", board, end="\n\n\n")
     
     # Get matrix representation of block
     block_m = get_block_matrix(block)
 
-    # Remove current block from board to allow for movement
+    # Remove current block from board so it doesn't conflict when finding next states
     b = np.array(board)
     block_pieces = np.argwhere(block_m)
     for _, pcs_pos in enumerate(block_pieces):
         pcs_pos_rel = pos + pcs_pos
         b[pcs_pos_rel[0], pcs_pos_rel[1]] = 0
-    # print("Starting State:\n", b, end="\n\n\n")
 
+    # Trim number of rotations for certain blocks
     rotations = 4
     if block.startswith('O'): rotations = 1
     elif block.startswith('I') or block.startswith('S') or block.startswith('Z'): rotations = 2
@@ -169,32 +167,24 @@ def find_next_states(board, block, pos):
     for rot in range(rotations):
         action_set = [] # Construct set of actions dynamically
 
+        # Add CCW action rot times to action set
         for times in range(rot):
             action_set.append(move["CCW"])
+
+        # Rotate block matrix 90 degrees CCW
         bm = np.rot90(block_m, rot)
         bp = np.argwhere(bm)
-        # print("Rotation:\n", bm)
 
         # First move to the farthest possible left
         p = np.array(pos)
         dir = np.array([0, 0])
-        # print("Init pos:", p)
         for i in range(1, 7):
             if check_collision(b, bm, p, np.array([0, -i])):
                 break
             else: 
                 dir = np.array([0, -i])
-                action_set.append(move["left"])
-                # print("Running pos:", p + dir)
+                action_set.append(move["left"]) 
         p += dir
-
-        # DEBUG
-        # left = np.array(b)
-        # for _, pcs_pos in enumerate(bp):
-        #     pcs_pos_rel = p + pcs_pos
-        #     if np.any(pcs_pos_rel < 0): continue
-        #     left[pcs_pos_rel[0], pcs_pos_rel[1]] = 1
-        # print("To the left\n",p,"\n",left, end="\n\n\n")
 
         # Drop block in each 'column' to find new states
         while True:
@@ -213,7 +203,6 @@ def find_next_states(board, block, pos):
             for _, pcs_pos in enumerate(bp):
                 pcs_pos_rel = p_down + pcs_pos
                 new_board[pcs_pos_rel[0], pcs_pos_rel[1]] = 1
-            # print("New state:\n",p_down,"\n",new_board, end="\n\n\n")
 
             # Construct necessary info for new state and append it to list
             heights = get_heights(new_board)
@@ -252,13 +241,13 @@ def find_best_state(states):
     best_index = 0
     best_val = -99999999
 
+    # Calculate a value of each state with the given paramters and find the greatest one
     for i in range(len(states)):
         a = states[i]["total_height"]
         b = states[i]["cleared_lines"]
         c = states[i]["holes"]
         d = states[i]["bumpiness"]
         val = np.dot([-0.510066, 0.760666, -0.35663, -0.184483], [a, b, c, d])
-        # print(val, " vs ", best_val)
         if val > best_val:
             best_val = val
             best_index = i
@@ -268,7 +257,7 @@ def find_best_state(states):
 for i in range(7000):
     state, _, done, info = env.step(action)
 
-    # Only determine next actions when current block changes i.e. statistics update
+    # Only determine next set of actions when current block changes i.e. statistics update
     if stats != info['statistics']:
         # Get necessary info
         block = info['current_piece']
@@ -282,42 +271,21 @@ for i in range(7000):
         elif block.startswith('I'): 
             pos = [-2, 3] 
 
+        # Get the action sequence of the next best state
         next_states = find_next_states(board, block, pos)
         best_state = find_best_state(next_states) # np.random.choice(next_states)
         action_set = best_state["action_set"]
-        # print(action_set)
 
-        action = 0
+        action = 0 # Must set action to NOOP (no operation) when current block changes
+    # Get the next action in the action set
     elif action_set:
         action = action_set.pop(0)
+    # Else just drop the block
     else:
         action = 5
 
     if done:
         env.reset()
     env.render()
-
-# for k in range(1, 5001):
-#     while True:
-#         action = env.action_space.sample()
-#         next_state, reward, done, info = env.step(action)
-#         Qs[state, action] += alpha * (reward * gamma * np.max(Qs[next_state]) - Qs[state, action])
-#         for i, Qv in enumerate(Qs):
-#             actions = np.argwhere(Qv == np.amax(Qv)).flatten().tolist()
-#             np.put(policy[i], actions, epsilon / nA + 1 - epsilon)
-#             policy[i] /= np.linalg.norm(policy[i], 1)
-#         if done:
-#             break
-#         state = next_state
-#     epsilon = 1 / k
-#     state = env.reset()
-#     env.render()
-
-# done = True
-# for step in range(8000):
-#     if done:
-#         state = env.reset()
-#     state, reward, done, info = env.step(env.action_space.sample())
-#     # env.render()
 
 env.close()
