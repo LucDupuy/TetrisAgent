@@ -170,6 +170,7 @@ def find_next_states(board, block, pos):
         # Add CCW action rot times to action set
         for times in range(rot):
             action_set.append(move["CCW"])
+            action_set.append(0)
 
         # Rotate block matrix 90 degrees CCW
         bm = np.rot90(block_m, rot)
@@ -183,7 +184,8 @@ def find_next_states(board, block, pos):
                 break
             else: 
                 dir = np.array([0, -i])
-                action_set.append(move["left"]) 
+                action_set.append(move["left"])
+                action_set.append(0) 
         p += dir
 
         # Drop block in each 'column' to find new states
@@ -195,7 +197,6 @@ def find_next_states(board, block, pos):
                     break
                 else: 
                     dir = np.array([i, 0])
-                    action_set.append(move["down"])
             p_down = np.array(p) + dir
 
             # Make a copy of board with block 'recorded' on it
@@ -215,7 +216,7 @@ def find_next_states(board, block, pos):
                 "holes": np.sum(holes),
                 "bumpiness": bumpiness,
                 "total_height": np.sum(heights),
-                "action_set": action_set
+                "action_set": action_set.copy()
             }
             next_states.append(new_state)
 
@@ -223,14 +224,14 @@ def find_next_states(board, block, pos):
             if check_collision(b, bm, p, np.array([0, 1])):
                 break # Stop if not
             else:
-                # Remove down actions for next action set
-                action_set = [a for a in action_set if a != move["down"]]
                 p += np.array([0, 1])
                 # Pop left action if available or append right action
-                if action_set and action_set[-1] == move["left"]:
+                if action_set and action_set[-2] == move["left"]:
+                    action_set.pop()
                     action_set.pop()
                 else:
                     action_set.append(move["right"])
+                    action_set.append(0)
 
     return next_states
 
@@ -247,14 +248,16 @@ def find_best_state(states):
         b = states[i]["cleared_lines"]
         c = states[i]["holes"]
         d = states[i]["bumpiness"]
-        val = np.dot([-0.510066, 0.760666, -0.35663, -0.184483], [a, b, c, d])
+
+        r = [-0.510066, 0.760666, -0.35663, -0.184483]
+        val = np.dot(r, [a, b, c, d])
         if val > best_val:
             best_val = val
             best_index = i
 
     return states[best_index]
 
-for i in range(7000):
+for i in range(20000):
     state, _, done, info = env.step(action)
 
     # Only determine next set of actions when current block changes i.e. statistics update
@@ -280,12 +283,14 @@ for i in range(7000):
     # Get the next action in the action set
     elif action_set:
         action = action_set.pop(0)
-    # Else just drop the block
-    else:
-        action = 5
+    # Drop block to lockdown when action set is empty
+    elif not action_set:
+        action = move['down']
 
     if done:
         env.reset()
+        action_set = []
+        action = 0
     env.render()
 
 env.close()
