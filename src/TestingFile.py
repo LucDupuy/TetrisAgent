@@ -137,7 +137,7 @@ def check_collision(board, block_m, pos, dir):
         if new_pos_rel[0] >= 20 or new_pos_rel[1] < 0 or new_pos_rel[1] >= 10:
             return True
         # Collision if new relative position of piece in block already occupied
-        elif board[new_pos_rel[0], new_pos_rel[1]] == 1:
+        elif new_pos_rel[0] >= 0 and board[new_pos_rel[0], new_pos_rel[1]] == 1:
             return True
     return False
 
@@ -257,7 +257,7 @@ def find_best_state(states):
 
     return states[best_index]
 
-for i in range(20000):
+for i in range(100000):
     state, _, done, info = env.step(action)
 
     # Only determine next set of actions when current block changes i.e. statistics update
