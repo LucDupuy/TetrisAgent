@@ -2,7 +2,7 @@ from nes_py.wrappers import JoypadSpace
 import gym_tetris
 from gym_tetris.actions import SIMPLE_MOVEMENT
 import numpy as np
-from pil import Image
+from PIL import Image
 
 env = gym_tetris.make('TetrisA-v0')
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
