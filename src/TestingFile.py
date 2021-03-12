@@ -3,6 +3,8 @@ import gym_tetris
 from gym_tetris.actions import SIMPLE_MOVEMENT
 import numpy as np
 from PIL import Image
+import pandas as pd
+import os
 
 env = gym_tetris.make('TetrisA-v0')
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
@@ -260,6 +262,34 @@ def find_best_state(states):
 
     return states[best_index]
 
+
+def makeResultsSpreadsheet(score, iterations):
+    """
+
+    :param score: the score achieved before loss
+    :param iterations: iterations taken to acheive this score
+    """
+
+    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+
+        results_file = "./Results.xls"
+
+        new_row = {'Score': [score], 'Iterations': [iterations]}
+
+        if os.path.isfile(results_file):
+            df = pd.read_excel(results_file)
+            df = df.append(new_row, ignore_index=True)
+
+
+            df.to_excel('./Results.xls',
+                             header=True, index=False)
+
+        else:
+            new_df = pd.DataFrame(data=new_row)
+            new_df.to_excel('./Results.xls',
+                             header=True, index=False)
+
+
 for i in range(ITERATIONS):
     state, _, done, info = env.step(action)
 
@@ -297,8 +327,7 @@ for i in range(ITERATIONS):
         # Print out the score to see how we improve
 
         if i is not ITERATIONS:
-            print("Score: ", info.get('score'))
-            print("Iterations: ", round_iterations, "\n")
+            makeResultsSpreadsheet(info.get('score'), round_iterations)
         env.reset()
         action_set = []
         action = 0
