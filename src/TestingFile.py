@@ -30,6 +30,9 @@ action_set = [] # The sequence of actions to take
 block = '' # The name of the current block that is falling
 stats = [] # The amount of each block dropped onto the playfield
 
+ITERATIONS = 100000
+last_num_iterations = 0
+
 def get_board(state):
     """
     Returns the current state of the board as a 20x10 array.
@@ -257,8 +260,9 @@ def find_best_state(states):
 
     return states[best_index]
 
-for i in range(100000):
+for i in range(ITERATIONS):
     state, _, done, info = env.step(action)
+
 
     # Only determine next set of actions when current block changes i.e. statistics update
     if stats != info['statistics']:
@@ -288,6 +292,13 @@ for i in range(100000):
         action = move['down']
 
     if done:
+        round_iterations = abs(last_num_iterations - i)
+        last_num_iterations = i
+        # Print out the score to see how we improve
+
+        if i is not ITERATIONS:
+            print("Score: ", info.get('score'))
+            print("Iterations: ", round_iterations, "\n")
         env.reset()
         action_set = []
         action = 0
