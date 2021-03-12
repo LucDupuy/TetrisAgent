@@ -244,13 +244,13 @@ def find_best_state(states):
 
     # Calculate a value of each state with the given paramters and find the greatest one
     for i in range(len(states)):
-        a = states[i]["total_height"]
-        b = states[i]["cleared_lines"]
-        c = states[i]["holes"]
-        d = states[i]["bumpiness"]
+        tallest_height = states[i]["total_height"]
+        num_cleared_lines = states[i]["cleared_lines"]
+        num_holes = states[i]["holes"]
+        difference_in_heights = states[i]["bumpiness"]
 
         r = [-0.510066, 0.760666, -0.35663, -0.184483]
-        val = np.dot(r, [a, b, c, d])
+        val = np.dot(r, [tallest_height, num_cleared_lines, num_holes, difference_in_heights])
         if val > best_val:
             best_val = val
             best_index = i
