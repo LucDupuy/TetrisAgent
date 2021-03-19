@@ -1,0 +1,276 @@
+Index: src/main.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>from nes_py.wrappers import JoypadSpace\r\nimport gym_tetris\r\nfrom gym_tetris.actions import MOVEMENT\r\nimport torch\r\nimport torch.nn as nn\r\nimport torch.nn.functional as F\r\nimport numpy as np\r\n\r\n\r\n# Uses GPU for computations if you have CUDA set up, otherwise it will use CPU\r\n# to(device) -> Use this to send specific code to the device specified\r\ndevice = torch.device(\"cuda:0\" if torch.cuda.is_available() else \"cpu\")\r\n\r\n\r\nclass NeuralNet(nn.Module):\r\n    \"\"\"\r\n    This class is the model of the neural network that we can potentially use later on\r\n    if we need to switch from Q-learning to Deep Q-learning.\r\n    \"\"\"\r\n    def __init__(self, screen_h, screen_w, num_actions):\r\n        super(NeuralNet, self).__init__()\r\n\r\n        self.conv1 = nn.Conv2d(3, 16, kernel_size=5, stride=2)\r\n        self.bn1 = nn.BatchNorm2d(16)\r\n\r\n        self.conv2 = nn.Conv2d(16, 32, kernel_size=5, stride=2)\r\n        self.bn2 = nn.BatchNorm2d(32)\r\n\r\n        self.conv3 = nn.Conv2d(32, 32, kernel_size=5, stride=2)\r\n        self.bn3 = nn.BatchNorm2d(32)\r\n\r\n        def conv2d_size_out(size, kernel_size=5, stride=2):\r\n            return (size - (kernel_size - 1) - 1) // stride + 1\r\n\r\n        convw = conv2d_size_out(conv2d_size_out(conv2d_size_out(screen_w)))\r\n        convh = conv2d_size_out(conv2d_size_out(conv2d_size_out(screen_h)))\r\n        linear_input_size = convw * convh * 32\r\n        self.head = nn.Linear(linear_input_size, num_actions)\r\n\r\n    def forward(self, x):\r\n        x = F.relu(self.bn1(self.conv1(x)))\r\n        x = F.relu(self.bn2(self.conv2(x)))\r\n        x = F.relu(self.bn3(self.conv3(x)))\r\n        return self.head(x.view(x.size(), -1))\r\n\r\n\r\ndef get_action(epsilon, Q_value, current_state):\r\n    \"\"\"\r\n    Returns a new action to take\r\n    :param epsilon: epsilon\r\n    :return: the action\r\n    \"\"\"\r\n\r\n    rand = np.random.random()\r\n\r\n    if rand < epsilon:\r\n        return env.action_space.sample()\r\n    else:\r\n        return np.argmax(Q_value[current_state])\r\n\r\n\r\n#Q Learning algorithm\r\ndef policy_iteration(env, nS, nA, iterations, gamma, alpha):\r\n    \"\"\"\r\n    I think we can make this pretty much the same as the assignment.\r\n    Might have to convert to Deep Q-Learning later on so it isn't\r\n    just a copy paste of assignment 2.\r\n    \"\"\"\r\n\r\n    Q_value = np.zeros((nS, nA))\r\n    policy = np.ones((nS, nA)) / nA\r\n    epsilon = 1\r\n    current_state = env.reset()\r\n\r\n    episodes = 0\r\n    while episodes < iterations:\r\n        done = False\r\n        t = 0\r\n        while not done and epsilon > 0.001:\r\n            action = get_action(epsilon=epsilon, Q_value=Q_value, current_state=current_state)\r\n            next_state, reward, done, _ = env.step(action)\r\n            Q_value[current_state][action] += alpha * (reward + gamma * np.amax(Q_value[next_state]) - Q_value[current_state][action])\r\n            t += 1\r\n            epsilon = 1 / t\r\n\r\n            current_state = next_state\r\n\r\n        episodes += 1\r\n        epsilon = 1\r\n        current_state = env.reset()\r\n        print(\"Episode\", episodes, \"done\")\r\n\r\n    return policy\r\n\r\n\r\ndef render_env(policy, max_steps):\r\n    episode_reward = 0\r\n    board_state = env.reset()\r\n\r\n    for step in range(max_steps):\r\n        env.render()\r\n\r\n        a = policy[board_state]\r\n        board_state, reward, done, info = env.step(a)\r\n        episode_reward += reward\r\n        if done:\r\n            break\r\n\r\n    env.render()\r\n\r\n\r\ndef sample_state_space(env):\r\n    \"\"\"\r\n    Determine how many states each episode will have\r\n    Since Tetris can be played indefinitely, it doesn't have a set amount of states unlike Frozen-Lake assignments\r\n    One solution would be to define the number of states ourselves or we could play through a game and use the number of actions there\r\n    \"\"\"\r\n    iterations = 0\r\n    done = False\r\n\r\n    while not done:\r\n        state, reward, done, info = env.step(env.action_space.sample())\r\n        iterations += 1\r\n        # env.render()\r\n\r\n    return iterations\r\n\r\n\r\nif __name__ == \"__main__\":\r\n    env = gym_tetris.make('TetrisA-v0')\r\n    env = JoypadSpace(env, MOVEMENT)\r\n\r\n    nS = sample_state_space(env=env)\r\n    nA = len(MOVEMENT)\r\n\r\n    pol = policy_iteration(env=env, nS=nS, nA=nA, iterations=1000, gamma=0.9, alpha=0.1)\r\n\r\n    render_env(pol, 5000)\r\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main.py b/src/main.py
+--- a/src/main.py	(revision 2b8606609e16abde701cdaaa3bdd60a92002b6d0)
++++ b/src/main.py	(date 1615323674928)
+@@ -1,6 +1,6 @@
+ from nes_py.wrappers import JoypadSpace
+ import gym_tetris
+-from gym_tetris.actions import MOVEMENT
++from gym_tetris.actions import SIMPLE_MOVEMENT
+ import torch
+ import torch.nn as nn
+ import torch.nn.functional as F
+@@ -44,19 +44,32 @@
+         return self.head(x.view(x.size(), -1))
+ 
+ 
+-def get_action(epsilon, Q_value, current_state):
+-    """
+-    Returns a new action to take
+-    :param epsilon: epsilon
+-    :return: the action
+-    """
++def sample_action(policy, state):
++    nS, nA = policy.shape
++    all_actions = np.arange(nA)
++    print(policy.shape, policy[hash(state.data)].shape)
++    return np.random.choice(all_actions, p=policy[state])
++
++
++def epsilon_greedy_policy_improve(Q_value, nS, nA, epsilon):
++    new_policy = epsilon * np.ones((nS, nA)) / nA
++    ############################
++    # YOUR IMPLEMENTATION HERE #
++    # HINT: IF TWO ACTIONS HAVE THE SAME MAXIMUM Q VALUE, THEY MUST BOTH BE EXECUTED EQUALLY LIKELY.
++    #     THIS IS IMPORTANT FOR EXPLORATION. This might prove useful:
++    #     https://stackoverflow.com/questions/17568612/how-to-make-numpy-argmax-return-all-occurrences-of-the-maximum
++
++    state_max = [np.argwhere(x == np.amax(x)).flatten().tolist() for x in Q_value]
++    one_minus = 1 - epsilon
+ 
+-    rand = np.random.random()
++    for state in range(nS):
++        for action in state_max[state]:
++            new_policy[state, action] += one_minus
+ 
+-    if rand < epsilon:
+-        return env.action_space.sample()
+-    else:
+-        return np.argmax(Q_value[current_state])
++        new_policy[state] = new_policy[state] / new_policy[state].sum()
++
++    ############################
++    return new_policy
+ 
+ 
+ #Q Learning algorithm
+@@ -68,29 +81,31 @@
+     """
+ 
+     Q_value = np.zeros((nS, nA))
+-    policy = np.ones((nS, nA)) / nA
+-    epsilon = 1
+     current_state = env.reset()
+ 
+     episodes = 0
+     while episodes < iterations:
++        epsilon = 1 / (episodes + 1)
++        policy_b = epsilon_greedy_policy_improve(Q_value, nS, nA, epsilon)
++
++        total_rewards = 0
+         done = False
+         t = 0
+-        while not done and epsilon > 0.001:
+-            action = get_action(epsilon=epsilon, Q_value=Q_value, current_state=current_state)
+-            next_state, reward, done, _ = env.step(action)
++        while not done and t < nS:
++            action = sample_action(policy=policy_b, state=current_state)
++            next_state, reward, done, _ = do_action(env, action)
++            env.render()
++            total_rewards += reward
+             Q_value[current_state][action] += alpha * (reward + gamma * np.amax(Q_value[next_state]) - Q_value[current_state][action])
+             t += 1
+-            epsilon = 1 / t
+ 
+             current_state = next_state
+ 
+         episodes += 1
+-        epsilon = 1
+         current_state = env.reset()
+-        print("Episode", episodes, "done")
++        print("Episode", episodes, "done (Total rewards:", total_rewards, "Ended ep at time step:", t, ")")
+ 
+-    return policy
++    return policy_b
+ 
+ 
+ def render_env(policy, max_steps):
+@@ -101,7 +116,7 @@
+         env.render()
+ 
+         a = policy[board_state]
+-        board_state, reward, done, info = env.step(a)
++        board_state, reward, done, info = do_action(env, a)
+         episode_reward += reward
+         if done:
+             break
+@@ -119,20 +134,29 @@
+     done = False
+ 
+     while not done:
+-        state, reward, done, info = env.step(env.action_space.sample())
++        state, reward, done, info = do_action(env, env.action_space.sample())
+         iterations += 1
+         # env.render()
+ 
+     return iterations
+ 
+ 
++def do_action(env, action):
++    state, reward, done, info = env.step(action)
++
++    if not done:
++        _, _, done, _ = env.step(5)  # Move down
++
++    return state, reward, done, info
++
++
+ if __name__ == "__main__":
+     env = gym_tetris.make('TetrisA-v0')
+-    env = JoypadSpace(env, MOVEMENT)
++    env = JoypadSpace(env, SIMPLE_MOVEMENT)
+ 
+-    nS = sample_state_space(env=env)
+-    nA = len(MOVEMENT)
++    # nS = sample_state_space(env=env)
++    nA = len(SIMPLE_MOVEMENT)
+ 
+-    pol = policy_iteration(env=env, nS=nS, nA=nA, iterations=1000, gamma=0.9, alpha=0.1)
++    pol = policy_iteration(env=env, nS=10000, nA=nA, iterations=1000, gamma=0.9, alpha=0.1)
+ 
+     render_env(pol, 5000)
+Index: src/TestingFile.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>from nes_py.wrappers import JoypadSpace\r\nimport gym_tetris\r\nfrom gym_tetris.actions import SIMPLE_MOVEMENT\r\nimport numpy as np\r\nfrom pil import Image\r\n\r\nenv = gym_tetris.make('TetrisA-v0')\r\nenv = JoypadSpace(env, SIMPLE_MOVEMENT)\r\n\r\n# For convenience\r\nmove = {\r\n    \"CW\": 1,\r\n    \"CCW\": 2,\r\n    \"right\": 3,\r\n    \"left\": 4,\r\n    \"down\": 5,\r\n}\r\n\r\n# nS = 20 * 10\r\n# nA = len(SIMPLE_MOVEMENT)\r\n# Qs = np.zeros((nS, nA))\r\n# policy = np.ones((nS, nA)) / nA\r\n# epsilon = 1\r\n# alpha = 0.1\r\n# gamma = 0.9\r\n\r\nstate = env.reset() # Screenshot/rgb array of game at a given time\r\naction = 5 # The current action to take (see move dictionary)\r\naction_set = [] # The sequence of actions to take\r\nblock = '' # The name of the current block that is falling\r\nstats = [] # The amount of each block dropped onto the playfield\r\n\r\ndef get_board(state):\r\n    \"\"\"\r\n    Returns the current state of the board as a 20x10 array.\r\n    \"\"\"\r\n    # Extract board from state i.e. crop board from snapshot of game\r\n    # Convert array to Image to resize it\r\n    board = Image.fromarray(state[47:207, 95:175])\r\n    # Resize to workable 10x20 array\r\n    board = board.resize((10, 20), Image.NEAREST)\r\n    board = np.array(board)\r\n    # Add color channels together to 'flatten' to one dimension\r\n    board = np.sum(board, 2)\r\n    # Change so that 1 = block, 0 = nothing   \r\n    board = (board > 0).astype(int)\r\n    return board\r\n\r\ndef get_heights(board):\r\n    \"\"\"\r\n    Returns the height of each column in the given state of the board.\r\n    \"\"\"\r\n    heights = np.zeros(10, dtype=int)\r\n    for i in range(len(board[0])):\r\n        if np.max(board[:, i]) == 0:\r\n            continue\r\n        else:\r\n            nonzeros = np.argwhere(board[:, i])\r\n            heights[i] = (20 - nonzeros[0]).astype(int)\r\n    return heights\r\n\r\ndef get_holes(board, heights):\r\n    \"\"\"\r\n    Returns the number of holes in each column in the given state of the board.\r\n    \"\"\"\r\n    holes = np.zeros(10, dtype=int)\r\n    for i in range(len(board[0])):\r\n        if heights[i] > 0:\r\n            max_h = (20 - heights[i]).astype(int)\r\n            zeros = np.argwhere(board[max_h:, i] == 0)\r\n            holes[i] = len(zeros)\r\n    return holes\r\n\r\ndef get_cleared_lines(board):\r\n    \"\"\"\r\n    Returns the number of cleared lines i.e. lines with just 1's on the given state of the board.\r\n    \"\"\"\r\n    lines = 0\r\n    for i in range(len(board)-1, 0, -1):\r\n        if np.min(board[i]) == 1:\r\n            lines += 1\r\n    return lines\r\n\r\ndef get_block_matrix(block):\r\n    \"\"\"\r\n    Returns matrix representation of the given block.\r\n\r\n    Example\r\n    -------\r\n    For the T block the matrix would be:\\n\r\n    0 0 0\\n\r\n    1 1 1\\n\r\n    0 1 0\\n\r\n\r\n    \"\"\"\r\n    if block.startswith('I'):\r\n        block_m = np.zeros((4, 4))\r\n        block_m[2] = 1\r\n    elif block.startswith('O'):\r\n        block_m = np.zeros((4, 4))\r\n        block_m[1:3, 1:3] = 1\r\n    elif block.startswith('J'):\r\n        block_m = np.zeros((3, 3))\r\n        block_m[1] = 1\r\n        block_m[2, 2] = 1\r\n    elif block.startswith('L'):\r\n        block_m = np.zeros((3, 3))\r\n        block_m[1] = 1\r\n        block_m[2, 0] = 1\r\n    elif block.startswith('S'):\r\n        block_m = np.zeros((3, 3))\r\n        block_m[1, 1:3] = 1\r\n        block_m[2, 0:2] = 1\r\n    elif block.startswith('Z'):\r\n        block_m = np.zeros((3, 3))\r\n        block_m[1, 0:2] = 1\r\n        block_m[2, 1:3] = 1\r\n    elif block.startswith('T'):\r\n        block_m = np.zeros((3, 3))\r\n        block_m[1] = 1\r\n        block_m[2, 1] = 1\r\n    return block_m\r\n\r\ndef check_collision(board, block_m, pos, dir):\r\n    \"\"\"\r\n    Checks if the given block at the given pos can move in the given dir on the given state of the board.\r\n\r\n    Returns\r\n    -------\r\n    True if there is a collision, false otherwise.\r\n    \"\"\"\r\n    new_pos = pos + dir\r\n    block_pieces = np.argwhere(block_m)\r\n    for _, pcs_pos in enumerate(block_pieces):\r\n        new_pos_rel = new_pos + pcs_pos\r\n        # Collision if new relative position of piece in block is outside walls\r\n        if new_pos_rel[0] >= 20 or new_pos_rel[1] < 0 or new_pos_rel[1] >= 10:\r\n            return True\r\n        # Collision if new relative position of piece in block already occupied\r\n        elif new_pos_rel[0] >= 0 and board[new_pos_rel[0], new_pos_rel[1]] == 1:\r\n            return True\r\n    return False\r\n\r\ndef find_next_states(board, block, pos):\r\n    \"\"\"\r\n    Returns all possible next states i.e. the lockdown positions of the current block given the current state of the board.\r\n    \"\"\"\r\n    \r\n    next_states = []\r\n    \r\n    # Get matrix representation of block\r\n    block_m = get_block_matrix(block)\r\n\r\n    # Remove current block from board so it doesn't conflict when finding next states\r\n    b = np.array(board)\r\n    block_pieces = np.argwhere(block_m)\r\n    for _, pcs_pos in enumerate(block_pieces):\r\n        pcs_pos_rel = pos + pcs_pos\r\n        b[pcs_pos_rel[0], pcs_pos_rel[1]] = 0\r\n\r\n    # Trim number of rotations for certain blocks\r\n    rotations = 4\r\n    if block.startswith('O'): rotations = 1\r\n    elif block.startswith('I') or block.startswith('S') or block.startswith('Z'): rotations = 2\r\n\r\n    # Try all possible rotations\r\n    for rot in range(rotations):\r\n        action_set = [] # Construct set of actions dynamically\r\n\r\n        # Add CCW action rot times to action set\r\n        for times in range(rot):\r\n            action_set.append(move[\"CCW\"])\r\n            action_set.append(0)\r\n\r\n        # Rotate block matrix 90 degrees CCW\r\n        bm = np.rot90(block_m, rot)\r\n        bp = np.argwhere(bm)\r\n\r\n        # First move to the farthest possible left\r\n        p = np.array(pos)\r\n        dir = np.array([0, 0])\r\n        for i in range(1, 7):\r\n            if check_collision(b, bm, p, np.array([0, -i])):\r\n                break\r\n            else: \r\n                dir = np.array([0, -i])\r\n                action_set.append(move[\"left\"])\r\n                action_set.append(0) \r\n        p += dir\r\n\r\n        # Drop block in each 'column' to find new states\r\n        while True:\r\n            # Drop block to lowest possible\r\n            dir = np.array([0,0])\r\n            for i in range(1, 20):\r\n                if check_collision(b, bm, p, np.array([i, 0])):\r\n                    break\r\n                else: \r\n                    dir = np.array([i, 0])\r\n            p_down = np.array(p) + dir\r\n\r\n            # Make a copy of board with block 'recorded' on it\r\n            new_board = np.array(b)\r\n            for _, pcs_pos in enumerate(bp):\r\n                pcs_pos_rel = p_down + pcs_pos\r\n                new_board[pcs_pos_rel[0], pcs_pos_rel[1]] = 1\r\n\r\n            # Construct necessary info for new state and append it to list\r\n            heights = get_heights(new_board)\r\n            bumpiness = np.sum(np.absolute(np.diff(heights)))\r\n            holes = get_holes(new_board, heights)\r\n            lines = get_cleared_lines(new_board)\r\n            new_state = {\r\n                \"board\": new_board,\r\n                \"cleared_lines\": lines,\r\n                \"holes\": np.sum(holes),\r\n                \"bumpiness\": bumpiness,\r\n                \"total_height\": np.sum(heights),\r\n                \"action_set\": action_set.copy()\r\n            }\r\n            next_states.append(new_state)\r\n\r\n            # Move right if possible\r\n            if check_collision(b, bm, p, np.array([0, 1])):\r\n                break # Stop if not\r\n            else:\r\n                p += np.array([0, 1])\r\n                # Pop left action if available or append right action\r\n                if action_set and action_set[-2] == move[\"left\"]:\r\n                    action_set.pop()\r\n                    action_set.pop()\r\n                else:\r\n                    action_set.append(move[\"right\"])\r\n                    action_set.append(0)\r\n\r\n    return next_states\r\n\r\ndef find_best_state(states):\r\n    \"\"\"\r\n    Using a genetic algorithm borrowed from https://codemyroad.wordpress.com/2013/04/14/tetris-ai-the-near-perfect-player/, find the next best state.\r\n    \"\"\"\r\n    best_index = 0\r\n    best_val = -99999999\r\n\r\n    # Calculate a value of each state with the given paramters and find the greatest one\r\n    for i in range(len(states)):\r\n        a = states[i][\"total_height\"]\r\n        b = states[i][\"cleared_lines\"]\r\n        c = states[i][\"holes\"]\r\n        d = states[i][\"bumpiness\"]\r\n\r\n        r = [-0.510066, 0.760666, -0.35663, -0.184483]\r\n        val = np.dot(r, [a, b, c, d])\r\n        if val > best_val:\r\n            best_val = val\r\n            best_index = i\r\n\r\n    return states[best_index]\r\n\r\nfor i in range(100000):\r\n    state, _, done, info = env.step(action)\r\n\r\n    # Only determine next set of actions when current block changes i.e. statistics update\r\n    if stats != info['statistics']:\r\n        # Get necessary info\r\n        block = info['current_piece']\r\n        stats = info['statistics']\r\n        board = get_board(state)\r\n\r\n        # Relative position of block on board\r\n        pos = [-1, 4]\r\n        if block.startswith('O'):\r\n            pos = [-1, 3]\r\n        elif block.startswith('I'): \r\n            pos = [-2, 3] \r\n\r\n        # Get the action sequence of the next best state\r\n        next_states = find_next_states(board, block, pos)\r\n        best_state = find_best_state(next_states) # np.random.choice(next_states)\r\n        action_set = best_state[\"action_set\"]\r\n\r\n        action = 0 # Must set action to NOOP (no operation) when current block changes\r\n    # Get the next action in the action set\r\n    elif action_set:\r\n        action = action_set.pop(0)\r\n    # Drop block to lockdown when action set is empty\r\n    elif not action_set:\r\n        action = move['down']\r\n\r\n    if done:\r\n        env.reset()\r\n        action_set = []\r\n        action = 0\r\n    env.render()\r\n\r\nenv.close()
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/TestingFile.py b/src/TestingFile.py
+--- a/src/TestingFile.py	(revision 2b8606609e16abde701cdaaa3bdd60a92002b6d0)
++++ b/src/TestingFile.py	(date 1615326500212)
+@@ -2,7 +2,7 @@
+ import gym_tetris
+ from gym_tetris.actions import SIMPLE_MOVEMENT
+ import numpy as np
+-from pil import Image
++from PIL import Image
+ 
+ env = gym_tetris.make('TetrisA-v0')
+ env = JoypadSpace(env, SIMPLE_MOVEMENT)
+@@ -137,7 +137,7 @@
+         if new_pos_rel[0] >= 20 or new_pos_rel[1] < 0 or new_pos_rel[1] >= 10:
+             return True
+         # Collision if new relative position of piece in block already occupied
+-        elif new_pos_rel[0] >= 0 and board[new_pos_rel[0], new_pos_rel[1]] == 1:
++        elif board[new_pos_rel[0], new_pos_rel[1]] == 1:
+             return True
+     return False
+ 
+@@ -170,7 +170,6 @@
+         # Add CCW action rot times to action set
+         for times in range(rot):
+             action_set.append(move["CCW"])
+-            action_set.append(0)
+ 
+         # Rotate block matrix 90 degrees CCW
+         bm = np.rot90(block_m, rot)
+@@ -184,8 +183,7 @@
+                 break
+             else: 
+                 dir = np.array([0, -i])
+-                action_set.append(move["left"])
+-                action_set.append(0) 
++                action_set.append(move["left"]) 
+         p += dir
+ 
+         # Drop block in each 'column' to find new states
+@@ -197,6 +195,7 @@
+                     break
+                 else: 
+                     dir = np.array([i, 0])
++                    action_set.append(move["down"])
+             p_down = np.array(p) + dir
+ 
+             # Make a copy of board with block 'recorded' on it
+@@ -216,7 +215,7 @@
+                 "holes": np.sum(holes),
+                 "bumpiness": bumpiness,
+                 "total_height": np.sum(heights),
+-                "action_set": action_set.copy()
++                "action_set": action_set
+             }
+             next_states.append(new_state)
+ 
+@@ -224,14 +223,14 @@
+             if check_collision(b, bm, p, np.array([0, 1])):
+                 break # Stop if not
+             else:
++                # Remove down actions for next action set
++                action_set = [a for a in action_set if a != move["down"]]
+                 p += np.array([0, 1])
+                 # Pop left action if available or append right action
+-                if action_set and action_set[-2] == move["left"]:
+-                    action_set.pop()
++                if action_set and action_set[-1] == move["left"]:
+                     action_set.pop()
+                 else:
+                     action_set.append(move["right"])
+-                    action_set.append(0)
+ 
+     return next_states
+ 
+@@ -248,16 +247,14 @@
+         b = states[i]["cleared_lines"]
+         c = states[i]["holes"]
+         d = states[i]["bumpiness"]
+-
+-        r = [-0.510066, 0.760666, -0.35663, -0.184483]
+-        val = np.dot(r, [a, b, c, d])
++        val = np.dot([-0.510066, 0.760666, -0.35663, -0.184483], [a, b, c, d])
+         if val > best_val:
+             best_val = val
+             best_index = i
+-
+     return states[best_index]
+ 
+-for i in range(100000):
++
++for i in range(7000):
+     state, _, done, info = env.step(action)
+ 
+     # Only determine next set of actions when current block changes i.e. statistics update
+@@ -276,21 +273,19 @@
+ 
+         # Get the action sequence of the next best state
+         next_states = find_next_states(board, block, pos)
+-        best_state = find_best_state(next_states) # np.random.choice(next_states)
++        best_state = find_best_state(next_states)  # np.random.choice(next_states)
+         action_set = best_state["action_set"]
+ 
+-        action = 0 # Must set action to NOOP (no operation) when current block changes
++        action = 0  # Must set action to NOOP (no operation) when current block changes
+     # Get the next action in the action set
+     elif action_set:
+         action = action_set.pop(0)
+-    # Drop block to lockdown when action set is empty
+-    elif not action_set:
+-        action = move['down']
++    # Else just drop the block
++    else:
++        action = 5
+ 
+     if done:
+         env.reset()
+-        action_set = []
+-        action = 0
+     env.render()
+ 
+ env.close()
+\ No newline at end of file
