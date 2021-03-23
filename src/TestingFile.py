@@ -129,7 +129,7 @@ def check_collision(board, block_m, pos, dir):
         if new_pos_rel[0] >= 20 or new_pos_rel[1] < 0 or new_pos_rel[1] >= 10:
             return True
         # Collision if new relative position of piece in block already occupied
-        elif board[new_pos_rel[0], new_pos_rel[1]] == 1:
+        elif new_pos_rel[0] >= 0 and board[new_pos_rel[0], new_pos_rel[1]] == 1:
             return True
     return False
 
@@ -171,9 +171,8 @@ def find_next_states(board, block, pos):
         # First move to the farthest possible left
         p = np.array(pos)
         dir = np.array([0, 0])
-        for i in range(1, 7):
-            if check_collision(b, bm, p, np.array([0, -i])):
-                break
+        for i in range(1, 9):
+            if check_collision(b, bm, p, np.array([0, -i])): break
             else: 
                 dir = np.array([0, -i])
                 action_set.append(move["left"])
@@ -186,8 +185,7 @@ def find_next_states(board, block, pos):
             dir = np.array([0,0])
             soft_drop_score = 0 # Points for soft dropping the block
             for i in range(1, 20):
-                if check_collision(b, bm, p, np.array([i, 0])):
-                    break
+                if check_collision(b, bm, p, np.array([i, 0])): break
                 else: 
                     dir = np.array([i, 0])
                     soft_drop_score += 1
@@ -217,8 +215,7 @@ def find_next_states(board, block, pos):
             next_states.append(new_state)
 
             # Move right if possible
-            if check_collision(b, bm, p, np.array([0, 1])):
-                break # Stop if not
+            if check_collision(b, bm, p, np.array([0, 1])): break
             else:
                 # Remove down actions for next action set
                 action_set = [a for a in action_set if a != move["down"]]
@@ -293,7 +290,7 @@ def find_best_weights(iterations=1000, alpha=0.001):
     Q_features = [] # List of all feature vectors of the best_Qvalues
     for i in range(iterations):
         state = env.reset()
-        action = 5 # The current action to take (see move dictionary)
+        action = 0 # The current action to take (see move dictionary)
         action_set = [] # The sequence of actions to take
         block = '' # The name of the current block that is falling
         stats = [] # The amount of each block dropped onto the playfield
@@ -409,10 +406,8 @@ if __name__ == "__main__":
 
             # Relative position of block on board
             pos = [-1, 4]
-            if block.startswith('O'):
-                pos = [-1, 3]
-            elif block.startswith('I'): 
-                pos = [-2, 3] 
+            if block.startswith('O'): pos = [-1, 3]
+            elif block.startswith('I'): pos = [-2, 3] 
 
             # Get the action sequence of the next best state
             next_states = find_next_states(board, block, pos)
@@ -421,11 +416,9 @@ if __name__ == "__main__":
 
             action = 0 # Must set action to NOOP (no operation) when current block changes
         # Get the next action in the action set
-        elif action_set:
-            action = action_set.pop(0)
+        elif action_set: action = action_set.pop(0)
         # Drop block to lockdown when action set is empty
-        elif not action_set:
-            action = move['down']
+        elif not action_set: action = move['down']
 
         if done:
             # round_iterations = abs(last_num_iterations - i)
