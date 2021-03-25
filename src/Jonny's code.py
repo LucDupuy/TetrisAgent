@@ -5,7 +5,11 @@ import numpy as np
 from PIL import Image
 import pandas as pd
 import os
-from numba import jit, cuda
+from numba import jit
+import time
+
+import warnings
+warnings.filterwarnings("ignore")
 
 env = gym_tetris.make('TetrisA-v0')
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
@@ -20,7 +24,7 @@ move = {
 }
 np.set_printoptions(precision=2, suppress=True, floatmode='fixed')
 
-
+@jit
 def get_board(state):
     """
     Returns the current state of the board as a 20x10 array.
@@ -37,7 +41,7 @@ def get_board(state):
     board = (board > 0).astype(int)
     return board
 
-
+@jit
 def get_heights(board):
     """
     Returns the height of each column in the given state of the board.
@@ -51,7 +55,7 @@ def get_heights(board):
             heights[i] = (20 - nonzeros[0]).astype(int)
     return heights
 
-
+@jit
 def get_holes(board, heights):
     """
     Returns the number of holes in each column in the given state of the board.
@@ -64,7 +68,7 @@ def get_holes(board, heights):
             holes[i] = len(zeros)
     return holes
 
-
+@jit
 def get_cleared_lines(board):
     """
     Returns the number of cleared lines i.e. lines with just 1's on the given state of the board. Also returns a new board with those lines cleared.
@@ -78,7 +82,7 @@ def get_cleared_lines(board):
         board = np.concatenate([np.zeros((lines, 10), dtype=np.int8), board])
     return lines, board
 
-
+@jit
 def get_block_matrix(block):
     """
     Returns matrix representation of the given block.
@@ -119,7 +123,7 @@ def get_block_matrix(block):
         block_m[2, 1] = 1
     return block_m
 
-
+@jit
 def check_collision(board, block_m, pos, dir):
     """
     Checks if the given block at the given pos can move in the given dir on the given state of the board.
@@ -211,10 +215,19 @@ def find_next_states(board, block, pos):
                     new_board[pcs_pos_rel[0], pcs_pos_rel[1]] = 1
 
             # Get necessary features for new state and append it to list
+
+
+            """
+            All using @jit and it throws warnings as it falls back to the non deafault version
+            Those warnings have been surpressed at the top of the file
+            """
+
             heights = get_heights(new_board)
             bumpiness = np.absolute(np.diff(heights))
             holes = get_holes(new_board, heights)
             lines, new_board = get_cleared_lines(new_board)
+
+
             new_state = {
                 "board": new_board,
                 "score": 40 * lines + soft_drop_score,
@@ -243,7 +256,7 @@ def find_next_states(board, block, pos):
 
     return next_states
 
-
+@jit
 def find_best_state_old(states):
     """
     Using a genetic algorithm borrowed from https://codemyroad.wordpress.com/2013/04/14/tetris-ai-the-near-perfect-player/, find the next best state.
@@ -266,7 +279,7 @@ def find_best_state_old(states):
 
     return states[best_index]
 
-
+@jit
 def get_features(state):
     """
     Returns the features of this state as a 1D array.
@@ -278,7 +291,7 @@ def get_features(state):
     # Ft. 21 is just 1.
     return np.concatenate((f0_9, f10_18, f19, f20, 1), axis=None)
 
-
+@jit
 def find_best_state(states, weights, gamma=0.9):
     """
     Calculate the approximation value function for each state using the given weights.
@@ -307,6 +320,7 @@ def find_best_weights(iterations=1000, alpha=0.001):
     Q_values = []  # List of all best_Qvalues
     Q_features = []  # List of all feature vectors of the best_Qvalues
     for i in range(iterations):
+        start = time.time()
         state = env.reset()
         action = 0  # The current action to take (see move dictionary)
         action_set = []  # The sequence of actions to take
@@ -319,7 +333,8 @@ def find_best_weights(iterations=1000, alpha=0.001):
         while True:
             state, reward, done, info = env.step(action)
             if done:
-                print("Iteration", i, "Score: ", info['score'])
+                end = time.time()
+                print("Iteration", i, "Score: ", info['score'], "Time Elapsed {:.2f}".format(end - start), " seconds")
                 if np.isfinite(weights).all():
                     final_weights[i] = weights
                     iteration_scores[i] = info['score']
