@@ -1,134 +1,361 @@
 from nes_py.wrappers import JoypadSpace
 import gym_tetris
-from gym_tetris.actions import MOVEMENT
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from gym_tetris.actions import SIMPLE_MOVEMENT
 import numpy as np
+from pil import Image
+import time
 
+env = gym_tetris.make('TetrisA-v0')
+env = JoypadSpace(env, SIMPLE_MOVEMENT)
 
-# Uses GPU for computations if you have CUDA set up, otherwise it will use CPU
-# to(device) -> Use this to send specific code to the device specified
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# Moveset for convenience
+move = {
+    "CW": 1,
+    "CCW": 2,
+    "right": 3,
+    "left": 4,
+    "down": 5,
+}
+np.set_printoptions(precision=6, suppress=True, floatmode='fixed')
 
-
-
-
-class NeuralNet(nn.Module):
+def get_board(state):
     """
-    This class is the model of the neural network that we can potentially use later on
-    if we need to switch from Q-learning to Deep Q-learning.
+    Returns the current state of the board as a 20x10 array.
     """
-    def __init__(self, screen_h, screen_w, num_actions):
-        super(NeuralNet, self).__init__()
+    # Extract board from state i.e. crop board from snapshot of game
+    # Convert array to Image to resize it
+    board = Image.fromarray(state[47:207, 95:175])
+    # Resize to workable 10x20 array
+    board = board.resize((10, 20), Image.NEAREST)
+    board = np.array(board)
+    # Add color channels together to 'flatten' to one dimension
+    board = np.sum(board, 2)
+    # Change so that 1 = block, 0 = nothing   
+    board = (board > 0).astype(int)
+    return board
 
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=5, stride=2)
-        self.bn1 = nn.BatchNorm2d(16)
-
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=5, stride=2)
-        self.bn2 = nn.BatchNorm2d(32)
-
-        self.conv3 = nn.Conv2d(32, 32, kernel_size=5, stride=2)
-        self.bn3 = nn.BatchNorm2d(32)
-
-        def conv2d_size_out(size, kernel_size=5, stride=2):
-            return (size - (kernel_size - 1) - 1) // stride + 1
-
-        convw = conv2d_size_out(conv2d_size_out(conv2d_size_out(screen_w)))
-        convh = conv2d_size_out(conv2d_size_out(conv2d_size_out(screen_h)))
-        linear_input_size = convw * convh * 32
-        self.head = nn.Linear(linear_input_size, num_actions)
-
-    def forward(self, x):
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
-        return self.head(x.view(x.size(), -1))
-
-
-
-def get_action(epsilon, Q_value, current_state):
+def get_heights(board):
     """
-    Returns a new action to take
-    :param epsilon: epsilon
-    :return: the action
+    Returns the height of each column in the given state of the board.
     """
+    heights = np.zeros(10, dtype=int)
+    for i in range(len(board[0])):
+        if np.max(board[:, i]) == 0:
+            continue
+        else:
+            nonzeros = np.argwhere(board[:, i])
+            heights[i] = (20 - nonzeros[0]).astype(int)
+    return heights
 
-    rand = np.random.random()
-
-    if rand < epsilon:
-        return env.action_space.sample()
-    else:
-        return np.argmax(Q_value[current_state])
-
-
-
-#Q Learning algorithm
-def policy_iteration(env, iterations, gamma, alpha):
+def get_holes(board, heights):
     """
-    I think we can make this pretty much the same as the assignment.
-    Might have to convert to Deep Q-Learning later on so it isn't
-    just a copy paste of assignment 2.
+    Returns the number of holes in each column in the given state of the board.
     """
+    holes = np.zeros(10, dtype=int)
+    for i in range(len(board[0])):
+        if heights[i] > 0:
+            max_h = (20 - heights[i]).astype(int)
+            zeros = np.argwhere(board[max_h:, i] == 0)
+            holes[i] = len(zeros)
+    return holes
 
+def get_cleared_lines(board):
+    """
+    Returns the number of cleared lines i.e. lines with just 1's on the given state of the board. Also returns a new board with those lines cleared.
+    """
+    lines = 0
+    for i in range(len(board)-1, 0, -1):
+        if np.min(board[i]) == 1:
+            lines += 1
+    if lines > 0: # If there a filled lines, clear them and update board
+        board = board[~np.all(board == 1, axis=1)]
+        board = np.concatenate([np.zeros((lines, 10), dtype=np.int8), board])
+    return lines, board
 
+def get_block_matrix(block):
+    """
+    Returns matrix representation of the given block.
 
-    # These are different for Tetris and need to be changed accordingly
-    nS = env.nS
-    nA = env.nA
+    Example
+    -------
+    For the T block the matrix would be:\n
+    0 0 0\n
+    1 1 1\n
+    0 1 0\n
 
+    """
+    if block.startswith('I'):
+        block_m = np.zeros((4, 4))
+        block_m[2] = 1
+    elif block.startswith('O'):
+        block_m = np.zeros((4, 4))
+        block_m[1:3, 1:3] = 1
+    elif block.startswith('J'):
+        block_m = np.zeros((3, 3))
+        block_m[1] = 1
+        block_m[2, 2] = 1
+    elif block.startswith('L'):
+        block_m = np.zeros((3, 3))
+        block_m[1] = 1
+        block_m[2, 0] = 1
+    elif block.startswith('S'):
+        block_m = np.zeros((3, 3))
+        block_m[1, 1:3] = 1
+        block_m[2, 0:2] = 1
+    elif block.startswith('Z'):
+        block_m = np.zeros((3, 3))
+        block_m[1, 0:2] = 1
+        block_m[2, 1:3] = 1
+    elif block.startswith('T'):
+        block_m = np.zeros((3, 3))
+        block_m[1] = 1
+        block_m[2, 1] = 1
+    return block_m
 
+def check_collision(board, block_m, pos, dir):
+    """
+    Checks if the given block at the given pos can move in the given dir on the given state of the board.
 
+    Returns
+    -------
+    True if there is a collision, false otherwise.
+    """
+    new_pos = pos + dir
+    block_pieces = np.argwhere(block_m)
+    for _, pcs_pos in enumerate(block_pieces):
+        new_pos_rel = new_pos + pcs_pos
+        # Collision if new relative position of piece in block is outside walls
+        if new_pos_rel[0] >= 20 or new_pos_rel[1] < 0 or new_pos_rel[1] >= 10:
+            return True
+        # Collision if new relative position of piece in block already occupied
+        elif new_pos_rel[0] >= 0 and board[new_pos_rel[0], new_pos_rel[1]] == 1:
+            return True
+    return False
 
-    Q_value = np.zeros((nS, nA))
-    policy = np.ones((env.nS, env.nA)) / env.nA
-    epsilon = 1
-    current_state = env.reset()
+def find_next_states(board, block):
+    """
+    Returns all possible next states i.e. the lockdown positions of the current block given the current state of the board.
+    """
+    pos = [-1, 4]
+    if block.startswith('O'): pos = [-1, 3]
+    elif block.startswith('I'): pos = [-2, 3] 
 
-    episodes = 0
-    while episodes < iterations:
-        t = 0
-        while epsilon > 0.0001:
+    next_states = []
+    
+    # Get matrix representation of block
+    block_m = get_block_matrix(block)
 
-            action = get_action(epsilon=epsilon, Q_value=Q_value, current_state=current_state)
-            next_state, reward, done, _ = env.step(action)
-            Q_value[current_state][action] += alpha * (reward + gamma * np.amax(Q_value[next_state]) - Q_value[current_state][action])
-            t += 1
-            epsilon = 1 / t
+    # Remove current block from board so it doesn't conflict when finding next states
+    b = np.array(board)
+    block_pieces = np.argwhere(block_m)
+    for _, pcs_pos in enumerate(block_pieces):
+        pcs_pos_rel = pos + pcs_pos
+        b[pcs_pos_rel[0], pcs_pos_rel[1]] = 0
+
+    # Trim number of rotations for certain blocks
+    rotations = 4
+    if block.startswith('O'): rotations = 1
+    elif block.startswith('I') or block.startswith('S') or block.startswith('Z'): rotations = 2
+
+    # Try all possible rotations
+    for rot in range(rotations):
+        action_set = [] # Construct set of actions dynamically
+
+        action_set.extend([move["CCW"], 0] * rot) # Add CCW action rot times to action set
+        bm = np.rot90(block_m, rot) # Rotate block matrix 90*rot degrees CCW
+        bp = np.argwhere(bm) # Get the actual positions of each piece of block
+
+        # First move to the farthest possible left
+        for i in range(9):
+            if check_collision(b, bm, pos, np.array([0, -i-1])): break
+        action_set.extend([move["left"], 0] * i)
+        p = np.array(pos) + np.array([0, -i])
+
+        # Drop block in each 'column' to find new states
+        while True:
+            # Drop block to lowest possible
+            for i in range(20):
+                if check_collision(b, bm, p, np.array([i+1, 0])): break
+            soft_drop_score = 1 * i # Points for soft dropping the block
+            p_down = np.array(p) + np.array([i, 0])
+
+            # Make a copy of board with block 'recorded' on it
+            new_board = np.array(b)
+            game_over = False
+            for _, pcs_pos in enumerate(bp):
+                pcs_pos_rel = p_down + pcs_pos
+                if np.all(pcs_pos_rel >= 0):
+                    new_board[pcs_pos_rel[0], pcs_pos_rel[1]] = 1
+                else: game_over = True
+
+            # Get necessary features for new state and append it to list
+            lines, new_board = get_cleared_lines(new_board)
+            heights = get_heights(new_board)
+            bumpiness = np.absolute(np.diff(heights))
+            holes = get_holes(new_board, heights)
+            new_state = {
+                "score": 40 * lines + soft_drop_score,
+                "holes": np.sum(holes),
+                "bumpiness": bumpiness,
+                "heights": heights,
+                "max_height": np.sum(heights),
+                "action_set": action_set.copy(),
+                "game_over": game_over
+            }
+            next_states.append(new_state)
+
+            # Move right from top if possible
+            if check_collision(b, bm, p, np.array([0, 1])): break
+            else:
+                p += np.array([0, 1])
+                # Pop left action if available or append right action
+                if action_set and action_set[-2] == move["left"]:
+                    action_set.pop()
+                    action_set.pop()
+                else: action_set.extend([move["right"], 0])
+
+    return next_states
+
+def get_features(state):
+    """
+    Returns the features of this state as a 1D array.
+    """
+    f0_9 = state["heights"] # Features 0-9 are the column heights
+    f10_18 = state["bumpiness"] # Ft. 10-18 are the abs. differences between columns
+    f19 = state["max_height"] # Ft. 19 is the tallest height
+    f20 = state["holes"] # Ft. 20 is the total number of holes
+    # Ft. 21 is just 1.
+    return np.concatenate((f0_9, f10_18, f19, f20, 1), axis=None)
+
+def find_best_state(states, weights, gamma=0.9):
+    """
+    Calculate the approximation value function for each state using the given weights.
+    Returns the state with the greatest value within the given collection of states
+    as well as its value function.
+    """
+    # Calculate a value of each state with the given paramters and find the greatest one
+    Q_values = np.array([s["score"] + gamma * np.dot(weights, get_features(s)) if not s["game_over"] else -9e300 for s in states])
+    best_index = np.argmax(Q_values)
+    return states[best_index], Q_values[best_index]
+
+def find_best_weights(episodes=1000, alpha=0.001):
+    """
+    Find the best weights, training the agent with the given number of episodes.
+    """
+    weights = np.concatenate((-np.ones(10), -2 * np.ones(9), -20, -1, 10), axis=None) 
+    iteration_scores = np.zeros(episodes)
+    final_weights = np.zeros((episodes, len(weights)))
+    Q_values = [] # List of all best_Qvalues
+    Q_features = [] # List of all feature vectors of the best_Qvalues
+    learn_rate = 10 # When to update weights (After learn_rate number of blocks)
+    for i in range(episodes):
+        start = time.time() # Measure how long each episode lasts
+        state = env.reset()
+        action = 0 # The current action to take (see move dictionary)
+        action_set = [] # The sequence of actions to take
+        block = '' # The name of the current block that is falling
+        stats = [] # The amount of each block dropped onto the playfield
+        block_score = 0 # The score earned for the current block
+        best_Qvalue = 0 # The value function of the best next state
+        prev_features = np.concatenate((np.zeros(len(weights)-1), 1), axis=None) # The previous state's features
+        learn_counter = 0 # Counter to when to update weights
+        while True:
+            state, reward, done, info = env.step(action)
             if done:
+                end = time.time()
+                print("Ep: {:3d}".format(i),
+                    "Score: {:6d}".format(info['score']),
+                    "Lines: {:3d}".format(info['number_of_lines']),
+                    "Time: {:6.2f}s".format(end - start),
+                    "Running qv list: {:8d}".format(len(Q_values)), 
+                    sep=" | ")
+                final_weights[i] = weights
+                iteration_scores[i] = info['score']
                 break
+            block_score += reward
+            if stats != info['statistics']:
+                block = info['current_piece']
+                stats = info['statistics']
+                board = get_board(state)
+                next_states = find_next_states(board, block)
 
-            current_state = next_state
-
-        episodes += 1
-        epsilon = 1
-        current_state = env.reset()
-
-
-
-    return policy
-
-
-def render_env(policy, max_steps):
-    episode_reward = 0
-    board_state = env.reset()
-
-    for step in range(max_steps):
-        env.render()
-
-        a = policy[board_state]
-        board_state, reward, done, info = env.step(a)
-        episode_reward += reward
-        if done:
-            break
-
-    env.render()
-
+                best_state, best_Qvalue = find_best_state(next_states, weights)
+                # learn_counter += 1
+                # Update Weight using Least Squares on cumulative best Q Values and their features
+                # if learn_counter > 0 and learn_counter % learn_rate == 0:
+                #     x = np.linalg.lstsq(np.array(Q_features), np.array(Q_values), rcond=None)
+                #     potential_weights = [w for w in x if not np.isscalar(w) and len(w) == len(weights)]
+                #     weights += alpha * np.array(potential_weights).min(axis=0) * prev_features
+                    # Q_values.clear()
+                    # Q_features.clear()
+                    # print(weights)
+                    # learn_counter = 0
+                best_features = get_features(best_state)
+                prev_features = best_features
+                # Add Q value and feature set associated with best state to a collection
+                if np.isfinite(best_Qvalue):
+                    Q_values.append(best_Qvalue)
+                    Q_features.append(best_features)
+                action_set = best_state["action_set"]
+                action = 0
+                block_score = 0
+            elif action_set: action = action_set.pop(0)
+            elif not action_set: action = move['down']
+            # env.render()
+        # Get new weights using least squares on best Q_values and their features
+        x = np.linalg.lstsq(np.array(Q_features), np.array(Q_values), rcond=None)
+        potential_weights = [w for w in x if not np.isscalar(w) and len(w) == len(weights)]
+        weights = np.array(potential_weights).min(axis=0)
+        # print("New w:\n", weights)
+    # Return weights from episode with greatest score
+    best_idx = np.argmax(iteration_scores)
+    return final_weights[best_idx]
 
 if __name__ == "__main__":
-    env = gym_tetris.make('TetrisA-v0')
-    env = JoypadSpace(env, MOVEMENT)
 
-    pol = policy_iteration(env=env, iterations=1000, gamma=0.9, alpha=0.1)
+    # Find optimal weights using value function approximation
+    start = time.time()
+    training_episodes = 1000
+    print("Finding optimal weights using", training_episodes, "training episodes...", )
+    weights = find_best_weights(training_episodes)
+    end = time.time()
+    print("Total time elapsed: ", time.strftime("%H:%M:%S", time.gmtime(end-start)))
+    print("Best weights:\n", weights)
 
-    render_env(pol, 5000)
+    # Show 100000 iterations of using the best weights
+    state = env.reset() # Screenshot/rgb array of game at a given time
+    action = 5 # The current action to take (see move dictionary)
+    action_set = [] # The sequence of actions to take
+    block = '' # The name of the current block that is falling
+    stats = [] # The amount of each block dropped onto the playfield
+    best_score = 0
+    for i in range(100000):
+        state, _, done, info = env.step(action)
+        if done:
+            if info['score'] > best_score:
+                best_score = info['score']
+            env.reset()
+            action_set = []
+            action = 0
+        
+        # Only determine next set of actions when current block changes i.e. statistics update
+        if stats != info['statistics']:
+            # Get necessary info
+            block = info['current_piece']
+            stats = info['statistics']
+            board = get_board(state)
+
+            # Get the action sequence of the next best state
+            next_states = find_next_states(board, block)
+            best_state, _ = find_best_state(next_states, weights)
+            action_set = best_state["action_set"]
+
+            action = 0 # Must set action to NOOP (no operation) when current block changes
+        # Get the next action in the action set
+        elif action_set: action = action_set.pop(0)
+        # Drop block to lockdown when action set is empty
+        elif not action_set: action = move['down']
+        env.render()
+
+    print("Best score using best weights:", best_score)
+    env.close()
