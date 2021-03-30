@@ -2,7 +2,7 @@ from nes_py.wrappers import JoypadSpace
 import gym_tetris
 from gym_tetris.actions import SIMPLE_MOVEMENT
 import numpy as np
-from pil import Image
+from PIL import Image
 import time
 
 env = gym_tetris.make('TetrisA-v0')
@@ -176,7 +176,6 @@ def find_next_states(board, block):
             # Drop block to lowest possible
             for i in range(20):
                 if check_collision(b, bm, p, np.array([i+1, 0])): break
-            soft_drop_score = 1 * i # Points for soft dropping the block
             p_down = np.array(p) + np.array([i, 0])
 
             # Make a copy of board with block 'recorded' on it
@@ -194,7 +193,7 @@ def find_next_states(board, block):
             bumpiness = np.absolute(np.diff(heights))
             holes = get_holes(new_board, heights)
             new_state = {
-                "score": 40 * lines + soft_drop_score,
+                "score": 40 * lines,
                 "holes": np.sum(holes),
                 "bumpiness": bumpiness,
                 "heights": heights,
@@ -234,7 +233,7 @@ def find_best_state(states, weights, gamma=0.9):
     as well as its value function.
     """
     # Calculate a value of each state with the given paramters and find the greatest one
-    Q_values = np.array([s["score"] + gamma * np.dot(weights, get_features(s)) if not s["game_over"] else -9e300 for s in states])
+    Q_values = np.array([np.dot(weights, get_features(s)) if not s["game_over"] else -9e300 for s in states])
     best_index = np.argmax(Q_values)
     return states[best_index], Q_values[best_index]
 
@@ -242,12 +241,11 @@ def find_best_weights(episodes=1000, alpha=0.001):
     """
     Find the best weights, training the agent with the given number of episodes.
     """
-    weights = np.concatenate((-np.ones(10), -2 * np.ones(9), -20, -1, 10), axis=None) 
+    weights = np.concatenate((-np.ones(10), -2 * np.ones(9), -40, -1, 10), axis=None) 
     iteration_scores = np.zeros(episodes)
     final_weights = np.zeros((episodes, len(weights)))
     Q_values = [] # List of all best_Qvalues
     Q_features = [] # List of all feature vectors of the best_Qvalues
-    learn_rate = 10 # When to update weights (After learn_rate number of blocks)
     for i in range(episodes):
         start = time.time() # Measure how long each episode lasts
         state = env.reset()
@@ -257,8 +255,6 @@ def find_best_weights(episodes=1000, alpha=0.001):
         stats = [] # The amount of each block dropped onto the playfield
         block_score = 0 # The score earned for the current block
         best_Qvalue = 0 # The value function of the best next state
-        prev_features = np.concatenate((np.zeros(len(weights)-1), 1), axis=None) # The previous state's features
-        learn_counter = 0 # Counter to when to update weights
         while True:
             state, reward, done, info = env.step(action)
             if done:
@@ -278,20 +274,8 @@ def find_best_weights(episodes=1000, alpha=0.001):
                 stats = info['statistics']
                 board = get_board(state)
                 next_states = find_next_states(board, block)
-
                 best_state, best_Qvalue = find_best_state(next_states, weights)
-                # learn_counter += 1
-                # Update Weight using Least Squares on cumulative best Q Values and their features
-                # if learn_counter > 0 and learn_counter % learn_rate == 0:
-                #     x = np.linalg.lstsq(np.array(Q_features), np.array(Q_values), rcond=None)
-                #     potential_weights = [w for w in x if not np.isscalar(w) and len(w) == len(weights)]
-                #     weights += alpha * np.array(potential_weights).min(axis=0) * prev_features
-                    # Q_values.clear()
-                    # Q_features.clear()
-                    # print(weights)
-                    # learn_counter = 0
                 best_features = get_features(best_state)
-                prev_features = best_features
                 # Add Q value and feature set associated with best state to a collection
                 if np.isfinite(best_Qvalue):
                     Q_values.append(best_Qvalue)
