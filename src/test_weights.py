@@ -9,7 +9,7 @@ def test_weights(episodes, weights, gamma=0.9):
     Q_values = []  # List of all best_Qvalues
     Q_features = []  # List of all feature vectors of the best_Qvalues
     for i in range(1, episodes+1):
-        _, _, _, _ = run(i, Q_values, Q_features, weights, gamma)
+        _, _, _, _ = run(i, Q_values, Q_features, weights, gamma, False)
 
 
 if __name__ == "__main__":

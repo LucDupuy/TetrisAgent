@@ -241,7 +241,7 @@ def get_features(state):
     return np.concatenate((f0_9, f10_18, f19, f20, 1), axis=None)
 
 
-def find_best_state(states, weights, epsilon=0):
+def find_best_state(states, weights):
     """
     Calculate the approximation value function for each state using the given weights.
     Returns the state with the greatest value within the given collection of states
@@ -249,11 +249,7 @@ def find_best_state(states, weights, epsilon=0):
     """
     # Calculate a value of each state with the given paramters and find the greatest one
     Q_values = np.array([np.dot(weights, get_features(s)) if not s["game_over"] else -9e300 for s in states])
-
-    if random.random() < 1-epsilon:
-        best_index = np.argmax(Q_values)
-    else:
-        best_index = np.random.choice(range(Q_values.size))
+    best_index = np.argmax(Q_values)
 
     return states[best_index], Q_values[best_index]
 
@@ -265,22 +261,16 @@ def find_best_weights(Q_features, Q_values, weights):
     return np.array(potential_weights).min(axis=0)
 
 
-def normalize(value, height=9e300, width=9e300):
-    return np.tanh(value / width) * height
-
-
-def run(episode, Q_values, Q_features, weights, gamma=0.9):
+def run(episode, Q_values, Q_features, weights, gamma=0.9, learning=True):
     start = time.time()  # Measure how long each episode lasts
     state = env.reset()
     action = 0  # The current action to take (see move dictionary)
     action_set = []  # The sequence of actions to take
     stats = []  # The amount of each block dropped onto the playfield
     best_Qvalue = 0  # The value function of the best next state
-    running_rewards = 0
 
     while True:
         state, reward, done, info = env.step(action)
-        running_rewards += reward
 
         if done:
             end = time.time()
@@ -288,7 +278,8 @@ def run(episode, Q_values, Q_features, weights, gamma=0.9):
                   "Score: {:6d}".format(info['score']),
                   "Lines: {:3d}".format(info['number_of_lines']),
                   "Time: {:6.2f}s".format(end - start),
-                  "Running qv list: {:8d}".format(len(Q_values)),
+                  # weights,
+                  # "Running qv list: {:8d}".format(len(Q_values)),
                   sep=" | ")
 
             # weights[np.nanargmax(weights)] -= info['score']
@@ -301,15 +292,19 @@ def run(episode, Q_values, Q_features, weights, gamma=0.9):
 
             next_states = find_next_states(board, block)
             best_state, best_Qvalue = find_best_state(next_states, weights)
-            best_features = get_features(best_state)
-            # Add Q value and feature set associated with best state to a collection
-            if np.isfinite(best_Qvalue):
-                Q_values.append(best_Qvalue)
-                Q_features.append(best_features)
+
+            if learning:
+                best_features = get_features(best_state)
+                # Add Q value and feature set associated with best state to a collection
+                if np.isfinite(best_Qvalue):
+                    Q_values.append(best_Qvalue)
+                    Q_features.append(best_features)
+
+                diff = find_best_weights(Q_features, Q_values, weights) - weights
+                weights += gamma * diff
 
             action_set = best_state["action_set"]
             action = 0
-            running_rewards = 0
 
         elif action_set:
             action = action_set.pop(0)
@@ -317,7 +312,7 @@ def run(episode, Q_values, Q_features, weights, gamma=0.9):
             action = move['down']
         # env.render()
 
-    return Q_values, Q_features, normalize(weights), info['score']
+    return Q_values, Q_features, weights, info['score']
 
 
 def learn(episodes=1000, gamma=0.9):
@@ -332,7 +327,6 @@ def learn(episodes=1000, gamma=0.9):
 
     for i in range(1, episodes+1):
         Q_values, Q_features, weights, score = run(i, Q_values, Q_features, weights, gamma)
-        weights = find_best_weights(Q_features, Q_values, weights)
 
     # Return weights from episode with greatest score
     return weights
@@ -341,9 +335,9 @@ def learn(episodes=1000, gamma=0.9):
 if __name__ == "__main__":
     # Find optimal weights using value function approximation
     start = time.time()
-    training_episodes = 1000
+    training_episodes = 100
     print("Finding optimal weights using", training_episodes, "training episodes...", )
-    weights = learn(training_episodes, gamma=0.9)
+    weights = learn(training_episodes, gamma=0.01)
     end = time.time()
     print("Total time elapsed: ", time.strftime("%H:%M:%S", time.gmtime(end - start)))
     print("Best weights:\n", weights)

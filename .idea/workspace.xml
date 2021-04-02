@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="6c063205-3a49-4b72-bc24-b4a5cb9ef602" name="Default Changelist" comment="Changed some code based on Jonny's">
-      <change afterPath="$PROJECT_DIR$/src/test_weights.py" afterDir="false" />
+    <list default="true" id="6c063205-3a49-4b72-bc24-b4a5cb9ef602" name="Default Changelist" comment="Added test_weights.py">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/test_weights.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/test_weights.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -120,7 +120,14 @@
       <option name="project" value="LOCAL" />
       <updated>1617217713427</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="Added test_weights.py">
+      <created>1617379387808</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1617379387808</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -138,6 +145,7 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Fixed QLearning errors" />
     <MESSAGE value="Changed some code based on Jonny's" />
-    <option name="LAST_COMMIT_MESSAGE" value="Changed some code based on Jonny's" />
+    <MESSAGE value="Added test_weights.py" />
+    <option name="LAST_COMMIT_MESSAGE" value="Added test_weights.py" />
   </component>
 </project>
