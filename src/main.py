@@ -261,6 +261,10 @@ def find_best_weights(Q_features, Q_values, weights):
     return np.array(potential_weights).min(axis=0)
 
 
+def func(x):
+    return 1 / np.cosh(0.01 * x)
+
+
 def run(episode, Q_values, Q_features, weights, gamma=0.9, learning=True):
     start = time.time()  # Measure how long each episode lasts
     state = env.reset()
@@ -269,8 +273,11 @@ def run(episode, Q_values, Q_features, weights, gamma=0.9, learning=True):
     stats = []  # The amount of each block dropped onto the playfield
     best_Qvalue = 0  # The value function of the best next state
 
+    running_reward = 0
+
     while True:
         state, reward, done, info = env.step(action)
+        running_reward += reward
 
         if done:
             end = time.time()
@@ -278,20 +285,8 @@ def run(episode, Q_values, Q_features, weights, gamma=0.9, learning=True):
                   "Score: {:6d}".format(info['score']),
                   "Lines: {:3d}".format(info['number_of_lines']),
                   "Time: {:6.2f}s".format(end - start),
+                  weights,
                   sep=" | ")
-            f = open("results.txt", "a")
-            f.write("Ep: {:3d}".format(episode))
-            f.write(" | ")
-
-            f.write("Score: {:6d}".format(info['score']))
-            f.write(" | ")
-
-            f.write("Lines: {:3d}".format(info['number_of_lines']))
-            f.write(" | ")
-
-            f.write("Time: {:6.2f}s".format(end - start))
-            f.write("\n")
-            f.close()
 
             # weights[np.nanargmax(weights)] -= info['score']
             break
@@ -311,11 +306,16 @@ def run(episode, Q_values, Q_features, weights, gamma=0.9, learning=True):
                     Q_values.append(best_Qvalue)
                     Q_features.append(best_features)
 
+                if len(Q_values) > 1e10:
+                    Q_values.pop()
+                    Q_features.pop()
+
                 diff = find_best_weights(Q_features, Q_values, weights) - weights
-                weights += gamma * diff
+                weights += func(running_reward) * gamma * diff
 
             action_set = best_state["action_set"]
             action = 0
+            running_reward = 0
 
         elif action_set:
             action = action_set.pop(0)
@@ -330,8 +330,6 @@ def learn(episodes=1000, gamma=0.9):
     """
     Find the best weights, training the agent with the given number of episodes.
     """
-
-    open("results.txt", "w").close()
     weights = -np.ones(22)
 
     Q_values = []  # List of all best_Qvalues
