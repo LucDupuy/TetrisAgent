@@ -362,7 +362,7 @@ def learn(episodes=1000, gamma=0.9):
 if __name__ == "__main__":
     # Find optimal weights using value function approximation
     start = time.time()
-    training_episodes = 100
+    training_episodes = 1000
     print("Finding optimal weights using", training_episodes, "training episodes...", )
     weights = learn(training_episodes, gamma=0.01)
     end = time.time()
