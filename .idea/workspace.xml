@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="6c063205-3a49-4b72-bc24-b4a5cb9ef602" name="Default Changelist" comment="Added progress file writing">
+    <list default="true" id="6c063205-3a49-4b72-bc24-b4a5cb9ef602" name="Default Changelist" comment="Tweaked some code">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.py" afterDir="false" />
     </list>
@@ -140,7 +140,14 @@
       <option name="project" value="LOCAL" />
       <updated>1617396403971</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="Tweaked some code">
+      <created>1617461350042</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1617461350042</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -161,6 +168,7 @@
     <MESSAGE value="Added test_weights.py" />
     <MESSAGE value="Changed Q learning code" />
     <MESSAGE value="Added progress file writing" />
-    <option name="LAST_COMMIT_MESSAGE" value="Added progress file writing" />
+    <MESSAGE value="Tweaked some code" />
+    <option name="LAST_COMMIT_MESSAGE" value="Tweaked some code" />
   </component>
 </project>

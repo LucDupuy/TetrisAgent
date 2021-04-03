@@ -288,7 +288,23 @@ def run(episode, Q_values, Q_features, weights, gamma=0.9, learning=True):
                   weights,
                   sep=" | ")
 
-            # weights[np.nanargmax(weights)] -= info['score']
+            f = open("results.txt", "a")
+            f.write("Ep: {:3d}".format(episode))
+            f.write(" | ")
+
+            f.write("Score: {:6d}".format(info['score']))
+            f.write(" | ")
+
+            f.write("Lines: {:3d}".format(info['number_of_lines']))
+            f.write(" | ")
+
+            f.write("Time: {:6.2f}s".format(end - start))
+            f.write(" | ")
+
+            f.write(np.array2string(weights))
+            f.write("\n")
+
+            f.close()
             break
 
         if stats != info['statistics']:
@@ -330,6 +346,7 @@ def learn(episodes=1000, gamma=0.9):
     """
     Find the best weights, training the agent with the given number of episodes.
     """
+    open("results.txt", "w").close()
     weights = -np.ones(22)
 
     Q_values = []  # List of all best_Qvalues
