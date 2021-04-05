@@ -1,119 +1,30 @@
 from nes_py.wrappers import JoypadSpace
 import gym_tetris
 from gym_tetris.actions import SIMPLE_MOVEMENT
-import torch
-import torch.nn as nn
-from collections import namedtuple
-import random
-import torch.nn.functional as F
 import numpy as np
-from collections import deque
+from PIL import Image
+import pandas as pd
+import os
+from numba import jit
+import time
 
-# Uses GPU for computations if you have CUDA set up, otherwise it will use CPU
-# to(device) -> Use this to send specific code to the device specified
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-
-LEARNING_RATE = 0.005
-REPLAY_MEMORY = 10000
-ITERATIONS = 100000
-EPOCHS = 1
-ACTION = 5
+import warnings
+warnings.filterwarnings("ignore")
 
 env = gym_tetris.make('TetrisA-v0')
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
 
-class NeuralNet(nn.Module):
-    """
-    This class is the model of the neural network that we can potentially use later on
-    if we need to switch from Q-learning to Deep Q-learning.
-    """
+# Moveset for convenience
+move = {
+    "CW": 1,
+    "CCW": 2,
+    "right": 3,
+    "left": 4,
+    "down": 5,
+}
+np.set_printoptions(precision=2, suppress=True, floatmode='fixed')
 
-    def __init__(self):
-        super(NeuralNet, self).__init__()
-
-        self.conv1 = nn.Sequential(nn.Linear(4, 64), nn.ReLU(inplace=True))
-        self.conv2 = nn.Sequential(nn.Linear(64, 64), nn.ReLU(inplace=True))
-        self.conv3 = nn.Sequential(nn.Linear(64, 1))
-
-        self._create_weights()
-
-    def _create_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.xavier_uniform_(m.weight)
-                nn.init.constant_(m.bias, 0)
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.conv3(x)
-
-        return x
-
-
-Transition = namedtuple('Transition',
-                        ('state', 'action', 'next_state', 'reward'))
-
-
-class ReplayMemory(object):
-
-    def __init__(self, capacity):
-        self.capacity = capacity
-        self.memory = []
-        self.position = 0
-
-    def push(self, *args):
-        """Saves a transition."""
-        if len(self.memory) < self.capacity:
-            self.memory.append(None)
-        self.memory[self.position] = Transition(*args)
-        self.position = (self.position + 1) % self.capacity
-
-    def sample(self, batch_size):
-        return random.sample(self.memory, batch_size)
-
-    def __len__(self):
-        return len(self.memory)
-
-
-
-def train():
-    for itr in range(ITERATIONS):
-        env.reset()
-        state, reward, done, info = env.step(ACTION)
-        reward = torch.tensor([reward], device=device)
-
-
-        
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+@jit
 def get_board(state):
     """
     Returns the current state of the board as a 20x10 array.
@@ -130,7 +41,7 @@ def get_board(state):
     board = (board > 0).astype(int)
     return board
 
-
+@jit
 def get_heights(board):
     """
     Returns the height of each column in the given state of the board.
@@ -144,7 +55,7 @@ def get_heights(board):
             heights[i] = (20 - nonzeros[0]).astype(int)
     return heights
 
-
+@jit
 def get_holes(board, heights):
     """
     Returns the number of holes in each column in the given state of the board.
@@ -157,27 +68,32 @@ def get_holes(board, heights):
             holes[i] = len(zeros)
     return holes
 
-
+@jit
 def get_cleared_lines(board):
     """
-    Returns the number of cleared lines i.e. lines with just 1's on the given state of the board.
+    Returns the number of cleared lines i.e. lines with just 1's on the given state of the board. Also returns a new board with those lines cleared.
     """
     lines = 0
     for i in range(len(board) - 1, 0, -1):
         if np.min(board[i]) == 1:
             lines += 1
-    return lines
+    if lines > 0:  # If there a filled lines, clear them and update board
+        board = board[~np.all(board == 1, axis=1)]
+        board = np.concatenate([np.zeros((lines, 10), dtype=np.int8), board])
+    return lines, board
 
-
+@jit
 def get_block_matrix(block):
     """
     Returns matrix representation of the given block.
+
     Example
     -------
     For the T block the matrix would be:\n
     0 0 0\n
     1 1 1\n
     0 1 0\n
+
     """
     if block.startswith('I'):
         block_m = np.zeros((4, 4))
@@ -207,10 +123,11 @@ def get_block_matrix(block):
         block_m[2, 1] = 1
     return block_m
 
-
+@jit
 def check_collision(board, block_m, pos, dir):
     """
     Checks if the given block at the given pos can move in the given dir on the given state of the board.
+
     Returns
     -------
     True if there is a collision, false otherwise.
@@ -268,7 +185,7 @@ def find_next_states(board, block, pos):
         # First move to the farthest possible left
         p = np.array(pos)
         dir = np.array([0, 0])
-        for i in range(1, 7):
+        for i in range(1, 9):
             if check_collision(b, bm, p, np.array([0, -i])):
                 break
             else:
@@ -281,38 +198,53 @@ def find_next_states(board, block, pos):
         while True:
             # Drop block to lowest possible
             dir = np.array([0, 0])
+            soft_drop_score = 0  # Points for soft dropping the block
             for i in range(1, 20):
                 if check_collision(b, bm, p, np.array([i, 0])):
                     break
                 else:
                     dir = np.array([i, 0])
+                    soft_drop_score += 1
             p_down = np.array(p) + dir
 
             # Make a copy of board with block 'recorded' on it
             new_board = np.array(b)
             for _, pcs_pos in enumerate(bp):
                 pcs_pos_rel = p_down + pcs_pos
-                new_board[pcs_pos_rel[0], pcs_pos_rel[1]] = 1
+                if np.all(pcs_pos_rel >= 0):
+                    new_board[pcs_pos_rel[0], pcs_pos_rel[1]] = 1
 
-            # Construct necessary info for new state and append it to list
+            # Get necessary features for new state and append it to list
+
+
+            """
+            All using @jit and it throws warnings as it falls back to the non deafault version
+            Those warnings have been surpressed at the top of the file
+            """
+
             heights = get_heights(new_board)
-            bumpiness = np.sum(np.absolute(np.diff(heights)))
+            bumpiness = np.absolute(np.diff(heights))
             holes = get_holes(new_board, heights)
-            lines = get_cleared_lines(new_board)
+            lines, new_board = get_cleared_lines(new_board)
+
+
             new_state = {
                 "board": new_board,
-                "cleared_lines": lines,
+                "score": 40 * lines + soft_drop_score,
                 "holes": np.sum(holes),
                 "bumpiness": bumpiness,
-                "total_height": np.sum(heights),
+                "heights": heights,
+                "max_height": np.max(heights),
                 "action_set": action_set.copy()
             }
             next_states.append(new_state)
 
             # Move right if possible
             if check_collision(b, bm, p, np.array([0, 1])):
-                break  # Stop if not
+                break
             else:
+                # Remove down actions for next action set
+                action_set = [a for a in action_set if a != move["down"]]
                 p += np.array([0, 1])
                 # Pop left action if available or append right action
                 if action_set and action_set[-2] == move["left"]:
@@ -324,8 +256,8 @@ def find_next_states(board, block, pos):
 
     return next_states
 
-
-def find_best_state(states):
+@jit
+def find_best_state_old(states):
     """
     Using a genetic algorithm borrowed from https://codemyroad.wordpress.com/2013/04/14/tetris-ai-the-near-perfect-player/, find the next best state.
     """
@@ -334,19 +266,235 @@ def find_best_state(states):
 
     # Calculate a value of each state with the given paramters and find the greatest one
     for i in range(len(states)):
-        tallest_height = states[i]["total_height"]
-        num_cleared_lines = states[i]["cleared_lines"]
-        num_holes = states[i]["holes"]
-        difference_in_heights = states[i]["bumpiness"]
+        a = np.sum(states[i]["heights"])
+        b = states[i]["score"]
+        c = states[i]["holes"]
+        d = np.sum(states[i]["bumpiness"])
 
         r = [-0.510066, 0.760666, -0.35663, -0.184483]
-        val = np.dot(r, [tallest_height, num_cleared_lines, num_holes, difference_in_heights])
+        val = np.dot(r, [a, b, c, d])
         if val > best_val:
             best_val = val
             best_index = i
 
     return states[best_index]
 
+@jit
+def get_features(state):
+    """
+    Returns the features of this state as a 1D array.
+    """
+    f0_9 = state["heights"]  # Features 0-9 are the column heights
+    f10_18 = state["bumpiness"]  # Ft. 10-18 are the abs. differences between columns
+    f19 = state["max_height"]  # Ft. 19 is the tallest height
+    f20 = state["holes"]  # Ft. 20 is the total number of holes
+    # Ft. 21 is just 1.
+    return np.concatenate((f0_9, f10_18, f19, f20, 1), axis=None)
+
+@jit
+def find_best_state(states, weights, gamma=0.9):
+    """
+    Calculate the approximation value function for each state using the given weights.
+    Returns the state with the greatest value within the given collection of states
+    as well as its value function.
+    """
+    best_index = 0
+    best_val = 0
+
+    # Calculate a value of each state with the given paramters and find the greatest one
+    for i in range(len(states)):
+        state_features = get_features(states[i])
+        val = gamma * np.dot(weights, state_features)
+        if val > best_val or i == 0:
+            best_val = val
+            best_index = i
+
+    return states[best_index], best_val
+
+
+
+def find_best_weights(iterations=1000, alpha=0.001):
+    weights = np.concatenate((-np.ones(10), -2 * np.ones(9), -20, -1, 10), axis=None)  # np.random.rand(22)
+    iteration_scores = np.zeros(iterations)
+    final_weights = np.zeros((iterations, 22))
+    Q_values = []  # List of all best_Qvalues
+    Q_features = []  # List of all feature vectors of the best_Qvalues
+    for i in range(iterations):
+        start = time.time()
+        state = env.reset()
+        action = 0  # The current action to take (see move dictionary)
+        action_set = []  # The sequence of actions to take
+        block = ''  # The name of the current block that is falling
+        stats = []  # The amount of each block dropped onto the playfield
+        block_score = 0  # The score earned for the current block
+        best_Qvalue = 0  # The value function of the best next state
+
+        prev_features = np.concatenate((np.zeros(21), 1), axis=None)
+        while True:
+            state, reward, done, info = env.step(action)
+            if done:
+                end = time.time()
+                print("Iteration", i, "Score: ", info['score'], "Time Elapsed {:.2f}".format(end - start), " seconds")
+                if np.isfinite(weights).all():
+                    final_weights[i] = weights
+                    iteration_scores[i] = info['score']
+                break
+            block_score += reward
+            if stats != info['statistics']:
+                block = info['current_piece']
+                stats = info['statistics']
+                board = get_board(state)
+                pos = [-1, 4]
+                if block.startswith('O'):
+                    pos = [-1, 3]
+                elif block.startswith('I'):
+                    pos = [-2, 3]
+                next_states = find_next_states(board, block, pos)
+
+                # Update Weight using Q-learning TD
+                # w = w + alpha * (r + gamma * max Q_hat_next - Q_hat) * ∇_w of Q_hat
+                # Variable breakdown:
+                #   r: the score of the current block after being placed
+                #   max Q_hat_next: the next state with the greatest value function
+                #   Q_hat: the value function of the current state
+                #   ∇_w of Q_hat: the feature set of the current state
+                # Does NOT guarantee convergence to optimal
+                prev_Qvalue = best_Qvalue
+                best_state, best_Qvalue = find_best_state(next_states, weights)
+                weights += alpha * (block_score + best_Qvalue - prev_Qvalue) * prev_features
+
+                best_features = get_features(best_state)
+                prev_features = best_features
+                # Add Q value and feature set associated with best state to a collection
+                if np.isfinite(best_Qvalue):
+                    Q_values.append(best_Qvalue)
+                    Q_features.append(best_features)
+                action_set = best_state["action_set"]
+                action = 0
+                block_score = 0
+            elif action_set:
+                action = action_set.pop(0)
+            elif not action_set:
+                action = move['down']
+            # env.render()
+        # Get new weights using least squares on best Q_values and their features
+        A = np.array(Q_features)
+        b = np.array(Q_values)
+        x = np.linalg.lstsq(A, b, rcond=0)
+        potential_weights = [w for w in x if not np.isscalar(w) and len(w) == 22]
+        weights = np.array(potential_weights).min(axis=0)
+        # print("New w:\n", weights)
+
+    env.reset()
+    # Return weight from iteration with greatest score
+    best_idx = np.argmax(iteration_scores)
+    return final_weights[best_idx]
+
+
+def makeResultsSpreadsheet(score, iterations):
+    """
+
+    :param score: the score achieved before loss
+    :param iterations: iterations taken to acheive this score
+    """
+
+    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+
+        results_file = "Best Results/Results.xls"
+
+        new_row = {'Score': [score], 'Iterations': [iterations]}
+
+        if os.path.isfile(results_file):
+            df = pd.read_excel(results_file)
+            df = df.append(new_row, ignore_index=True)
+
+            df.to_excel('./Results.xls',
+                        header=True, index=False)
+
+        else:
+            new_df = pd.DataFrame(data=new_row)
+            new_df.to_excel('./Results.xls',
+                            header=True, index=False)
+
+
 if __name__ == "__main__":
 
-    train()
+    ITERATIONS = 100000
+    last_num_iterations = 0
+
+    SAVED_WEIGHTS = True
+
+
+    """
+    Trains, if there aren't weights already
+    """
+    if not SAVED_WEIGHTS:
+        # Find optimal weights using value function approximation
+        weights = find_best_weights(1, 0.001)
+        weights = np.asarray(weights)
+        np.savetxt('bad_weights.csv', weights, delimiter=',')
+
+        weights = find_best_weights(500, 0.001)
+        weights = np.asarray(weights)
+        np.savetxt('best_weights.csv', weights, delimiter=',')
+
+
+    """
+    Load whichever weight you want (baseline or best)
+    """
+    #weights  = np.loadtxt('./Baseline Results/bad_weights.csv', delimiter=",")
+    weights = np.loadtxt('./Best Results/best_weights.csv', delimiter=",")
+
+
+
+
+    print("TESTING")
+    state = env.reset()  # Screenshot/rgb array of game at a given time
+    action = 5  # The current action to take (see move dictionary)
+    action_set = []  # The sequence of actions to take
+    block = ''  # The name of the current block that is falling
+    stats = []  # The amount of each block dropped onto the playfield
+
+    for i in range(ITERATIONS):
+        state, _, done, info = env.step(action)
+
+        # Only determine next set of actions when current block changes i.e. statistics update
+        if stats != info['statistics']:
+            # Get necessary info
+            block = info['current_piece']
+            stats = info['statistics']
+            board = get_board(state)
+
+            # Relative position of block on board
+            pos = [-1, 4]
+            if block.startswith('O'):
+                pos = [-1, 3]
+            elif block.startswith('I'):
+                pos = [-2, 3]
+
+            # Get the action sequence of the next best state
+            next_states = find_next_states(board, block, pos)
+            best_state, _ = find_best_state(next_states, weights)
+            action_set = best_state["action_set"]
+
+            action = 0  # Must set action to NOOP (no operation) when current block changes
+        # Get the next action in the action set
+        elif action_set:
+            action = action_set.pop(0)
+        # Drop block to lockdown when action set is empty
+        elif not action_set:
+            action = move['down']
+
+        if done:
+
+           """I believe this adds to the sheet already there, so make sure it is empty first"""
+           makeResultsSpreadsheet(info.get('score'), i)
+           env.reset()
+           action_set = []
+           action = 0
+
+      #  print("Iteration", i, "Score: ", info['score'])
+        env.render()
+
+
+    env.close()
