@@ -313,8 +313,7 @@ def find_best_state(states, weights, gamma=0.9):
 
 
 
-def find_best_weights(iterations=1000, alpha=0.001):
-    weights = np.concatenate((-np.ones(10), -2 * np.ones(9), -20, -1, 10), axis=None)  # np.random.rand(22)
+def find_best_weights(iterations, alpha, weights):
     iteration_scores = np.zeros(iterations)
     final_weights = np.zeros((iterations, 22))
     Q_values = []  # List of all best_Qvalues
@@ -391,38 +390,13 @@ def find_best_weights(iterations=1000, alpha=0.001):
     return final_weights[best_idx]
 
 
-def makeResultsSpreadsheet(score, iterations):
-    """
-
-    :param score: the score achieved before loss
-    :param iterations: iterations taken to acheive this score
-    """
-
-    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-
-        results_file = "Best Results/Results.xls"
-
-        new_row = {'Score': [score], 'Iterations': [iterations]}
-
-        if os.path.isfile(results_file):
-            df = pd.read_excel(results_file)
-            df = df.append(new_row, ignore_index=True)
-
-            df.to_excel('./Results.xls',
-                        header=True, index=False)
-
-        else:
-            new_df = pd.DataFrame(data=new_row)
-            new_df.to_excel('./Results.xls',
-                            header=True, index=False)
-
-
 if __name__ == "__main__":
 
-    ITERATIONS = 100000
+    ITERATIONS = 10000
     last_num_iterations = 0
 
     SAVED_WEIGHTS = True
+
 
 
     """
@@ -430,20 +404,21 @@ if __name__ == "__main__":
     """
     if not SAVED_WEIGHTS:
         # Find optimal weights using value function approximation
-        weights = find_best_weights(1, 0.001)
-        weights = np.asarray(weights)
-        np.savetxt('bad_weights.csv', weights, delimiter=',')
+        weights = np.concatenate((-np.ones(10), -2 * np.ones(9), -20, -1, 10), axis=None)  # np.random.rand(22)
+        baseline_weights = find_best_weights(1, 0.001, weights)
+        baseline_weights_arr = np.asarray(baseline_weights)
+        np.savetxt('./Baseline Results/baseline_weights.csv', baseline_weights_arr, delimiter=',')
 
-        weights = find_best_weights(500, 0.001)
-        weights = np.asarray(weights)
-        np.savetxt('best_weights.csv', weights, delimiter=',')
+        best_weights = find_best_weights(1000, 0.001, baseline_weights)
+        bestweights = np.asarray(best_weights)
+        np.savetxt('./Best Results/best_weights.csv', best_weights, delimiter=',')
 
 
     """
     Load whichever weight you want (baseline or best)
     """
-    #weights  = np.loadtxt('./Baseline Results/bad_weights.csv', delimiter=",")
-    weights = np.loadtxt('./Best Results/best_weights.csv', delimiter=",")
+    weights  = np.loadtxt('./Baseline Results/baseline_weights.csv', delimiter=",")
+    #weights = np.loadtxt('./Best Results/best_weights.csv', delimiter=",")
 
 
 
@@ -454,6 +429,7 @@ if __name__ == "__main__":
     action_set = []  # The sequence of actions to take
     block = ''  # The name of the current block that is falling
     stats = []  # The amount of each block dropped onto the playfield
+    scores = []
 
     for i in range(ITERATIONS):
         state, _, done, info = env.step(action)
@@ -485,16 +461,20 @@ if __name__ == "__main__":
         elif not action_set:
             action = move['down']
 
-        if done:
+        scores.append(info.get('score'))
 
-           """I believe this adds to the sheet already there, so make sure it is empty first"""
-           makeResultsSpreadsheet(info.get('score'), i)
+        if done:
            env.reset()
            action_set = []
            action = 0
 
-      #  print("Iteration", i, "Score: ", info['score'])
+        """I believe this adds to the sheet already there, so make sure it is empty first"""
+
         env.render()
+
+    scores_arr = np.array(scores)
+    print(scores_arr)
+    np.savetxt('./Best_Results.csv', scores_arr, delimiter=',')
 
 
     env.close()
